@@ -25,11 +25,38 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/tricktakers_web"
 import topbar from "../vendor/topbar"
 
+const CharactersCodex = {
+  mounted() {
+    const sections = this.el.querySelectorAll(".char-section")
+    const links = this.el.querySelectorAll(".toc a")
+
+    if (!sections.length || !links.length) return
+
+    this.observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const id = entry.target.id
+            links.forEach((link) => link.classList.toggle("active", link.getAttribute("href") === `#${id}`))
+          }
+        })
+      },
+      {rootMargin: "-40% 0px -55% 0px"}
+    )
+
+    sections.forEach((section) => this.observer.observe(section))
+  },
+
+  destroyed() {
+    if (this.observer) this.observer.disconnect()
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {CharactersCodex, ...colocatedHooks},
 })
 
 // Show progress bar on live navigation and form submits
@@ -80,4 +107,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-

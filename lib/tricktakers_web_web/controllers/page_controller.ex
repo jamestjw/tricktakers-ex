@@ -5,6 +5,10 @@ defmodule TricktakersWebWeb.PageController do
     redirect(conn, external: "/tricktakers/index.html")
   end
 
+  def characters(conn, _params) do
+    redirect(conn, external: "/tricktakers/characters.html")
+  end
+
   def screen(conn, %{"name" => name}) do
     file =
       case name do

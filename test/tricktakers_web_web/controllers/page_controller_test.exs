@@ -3,6 +3,6 @@ defmodule TricktakersWebWeb.PageControllerTest do
 
   test "GET /", %{conn: conn} do
     conn = get(conn, ~p"/")
-    assert redirected_to(conn) == "/tricktakers/index.html"
+    assert html_response(conn, 200) =~ "Tricktakers"
   end
 end

@@ -2,6 +2,7 @@
    https://tailwindcss.com/docs/configuration */
 
 @import "tailwindcss" source(none);
+@import "./tricktakers.css";
 @source "../css";
 @source "../js";
 @source "../../lib/tricktakers_web_web";
@@ -103,3 +104,22 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+@media (max-width: 980px) {
+  .app-bar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .app-bar nav {
+    width: 100%;
+    overflow-x: auto;
+    margin-left: 0;
+    padding-bottom: 6px;
+  }
+
+  .page,
+  .page-wide {
+    padding: 24px 16px 48px;
+  }
+}

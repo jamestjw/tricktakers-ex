@@ -1,0 +1,1089 @@
+<Layouts.app flash={@flash}>
+  <div class="app" data-screen-label="08 Characters">
+    <div class="app-bar">
+      <.link navigate={~p"/"} class="brand">
+        <span class="glyph">T</span>
+        <span>Tricktakers</span>
+      </.link>
+      <nav>
+        <.link navigate={~p"/"}>Landing</.link>
+        <.link navigate={~p"/lobby"}>Lobby</.link>
+        <.link navigate={~p"/characters"} aria-current="page">Characters</.link>
+      </nav>
+    </div>
+
+    <main class="page-wide" id="characters-page" phx-hook="CharactersCodex">
+      <div style="margin-bottom: 48px;">
+        <div class="eyebrow">The roster</div>
+        <h1 class="h-display" style="margin: 12px 0 16px; max-width: 14ch;">
+          Eight characters, eight games.
+        </h1>
+        <p class="body" style="max-width: 64ch; color: var(--ink-mute); font-size: 16px;">
+          Each character contracts a unique style of trick-taking — its own scoring, its own components,
+          its own way to win the game outright. Use the priority order (1A &rarr; 5B) when characters tie or compete on the same condition.
+        </p>
+      </div>
+
+      <div class="codex">
+        <!-- TOC -->
+        <aside class="toc">
+          <div class="eyebrow" style="margin-bottom: 10px;">Characters</div>
+          <a href="#king" class="active"><span class="pri">1A</span>King</a>
+          <a href="#gambler"><span class="pri">2A</span>Gambler</a>
+          <a href="#resistance"><span class="pri">3A</span>Resistance</a>
+          <a href="#hermit"><span class="pri">4A</span>Hermit</a>
+          <a href="#berserker"><span class="pri">5A</span>Berserker</a>
+          <a href="#adventurer"><span class="pri">3B</span>Adventurer</a>
+          <a href="#collector"><span class="pri">4B</span>Collector</a>
+          <a href="#ruler"><span class="pri">5B</span>Ruler</a>
+          <div class="divider" style="margin: 16px 0;"></div>
+          <div class="body-sm muted" style="padding: 0 14px;">
+            Priority decides ties &mdash; both for selection order and for simultaneous wins.
+          </div>
+        </aside>
+        
+<!-- Character entries -->
+        <div>
+          <!-- KING -->
+          <section id="king" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar gold"></div>
+                <div class="priority-tag">Priority 1A · Trick winner</div>
+                <h2 class="name">King</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">3 tricks</div>
+                  <div class="v">+80 pt</div>
+                </div>
+                <div>
+                  <div class="l">Win game</div>
+                  <div class="v">5 tricks</div>
+                </div>
+                <div>
+                  <div class="l">Final round</div>
+                  <div class="v">×2 score</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Ability</div>
+                  <div class="val">
+                    <strong>King's Privilege.</strong>
+                    Add the King's Exclusive Rare card to your hand and discard any card. The extra Rare makes winning tricks far easier.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Score</div>
+                  <div class="val">
+                    Points by tricks won this round.
+                    <div class="tier-row">
+                      <div class="tier zero">
+                        <div class="label">0</div>
+                        <div class="v">0</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">1</div>
+                        <div class="v">+20</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">2</div>
+                        <div class="v">+50</div>
+                      </div>
+                      <div class="tier highlight">
+                        <div class="label">3</div>
+                        <div class="v">+80</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">4</div>
+                        <div class="v">+120</div>
+                      </div>
+                      <div class="tier win">
+                        <div class="label">5</div>
+                        <div class="v">WIN</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Final round</div>
+                  <div class="val">
+                    <strong>The Final Battle.</strong>
+                    Score is doubled — 3 tricks pays +160, 4 tricks pays +240.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Next round</div>
+                  <div class="val">
+                    If you select King, you pick first next round — but cannot pick King again.
+                  </div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="stack">
+                  <div class="pcard king-rare size-lg">
+                    <div class="corner">
+                      <div class="num">王</div>
+                    </div>
+                    <div class="center">★</div>
+                    <div class="corner tr">
+                      <div class="num">王</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="caption">
+                  <strong>King's Exclusive Rare.</strong>
+                  Joins your hand at setup; you discard any one card to balance.
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- GAMBLER -->
+          <section id="gambler" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar"></div>
+                <div class="priority-tag">Priority 2A · Bid + bet</div>
+                <h2 class="name">Gambler</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">Bid range</div>
+                  <div class="v">0–5 tricks</div>
+                </div>
+                <div>
+                  <div class="l">Bet</div>
+                  <div class="v">up to 50 pt</div>
+                </div>
+                <div>
+                  <div class="l">Win game</div>
+                  <div class="v">Hit bid 4 or 5</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Setup</div>
+                  <div class="val">
+                    Immediately gain <strong>+20 pt</strong>. Set the Bidding Card to your bid (0–5 tricks).
+                    During setup, you may also discard any number of cards from your hand and draw the same number.
+                    You can do this up to <strong>two times</strong> each round.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Bet</div>
+                  <div class="val">
+                    Place up to <strong>50 pt</strong>
+                    next to the Bidding Card. If you make your bid, you gain the amount you bet. If you miss your bid, you lose that same amount.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Score (bid hit)</div>
+                  <div class="val">
+                    You score these bid rewards only when your bid is correct. If your bid is wrong, you only lose your bet.
+                    <div class="tier-row">
+                      <div class="tier">
+                        <div class="label">Bid 0</div>
+                        <div class="v">+30</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">Bid 1</div>
+                        <div class="v">+60</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">Bid 2</div>
+                        <div class="v">+90</div>
+                      </div>
+                      <div class="tier highlight">
+                        <div class="label">Bid 3</div>
+                        <div class="v">+150</div>
+                      </div>
+                      <div class="tier win">
+                        <div class="label">Bid 4</div>
+                        <div class="v">WIN</div>
+                      </div>
+                      <div class="tier win">
+                        <div class="label">Bid 5</div>
+                        <div class="v">WIN</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Final round</div>
+                  <div class="val">
+                    In the final round, you can wager up to <strong>100 points</strong>
+                    instead of 50.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Win</div>
+                  <div class="val">Hit a bid of 4 or 5 in any round.</div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="row gap-4" style="align-items: center;">
+                  <div class="die">2</div>
+                  <div class="col gap-2" style="text-align: left;">
+                    <div
+                      class="mono"
+                      style="font-size: 11px; letter-spacing: 0.12em; color: var(--ink-mute);"
+                    >
+                      BIDDING CARD
+                    </div>
+                    <div class="h-3">Bid 2 · Bet 50</div>
+                    <div class="body-sm muted" style="margin-top: 6px;">
+                      Hit: +90 (bid) +50 (bet) = <strong>+140 pt</strong>.<br />Miss: −50 pt.
+                    </div>
+                  </div>
+                </div>
+                <div class="caption editorial">
+                  <strong>The Bidding Card</strong>
+                  <span>
+                    sets the call in plain sight — opponents read your wager and play around it.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- RESISTANCE -->
+          <section id="resistance" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar crimson"></div>
+                <div class="priority-tag">Priority 3A · Kakumei</div>
+                <h2 class="name">Resistance</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">Revolt trick</div>
+                  <div class="v">+30 to +100 pt</div>
+                </div>
+                <div>
+                  <div class="l">Token</div>
+                  <div class="v">1 / round</div>
+                </div>
+                <div>
+                  <div class="l">Black + Revolt</div>
+                  <div class="v">Win game</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Ability</div>
+                  <div class="val">
+                    <strong>Declare Revolt</strong>
+                    on your turn, once per round, by placing the Revolt Token on the card you just played. The hierarchy
+                    <strong>inverts</strong>
+                    for that one trick — weakest wins.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Lead nullified</div>
+                  <div class="val">
+                    During the Revolt Trick, leading suit no longer matters among Red/Blue/Green, and a 1 no longer beats a 10 of the same color.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Score (Revolt Trick win)</div>
+                  <div class="val">
+                    Points based on the winning card.
+                    <div class="chip-row">
+                      <span class="chip">
+                        <span class="k">White Flag</span><span class="v">+30</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">1–3</span><span class="v">+50</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">4–6</span><span class="v">+80</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">7–9</span><span class="v">+100</span>
+                      </span>
+                      <span class="chip win">
+                        <span class="k">Any Black</span><span class="v">WIN</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Black crown</div>
+                  <div class="val">
+                    If your only trick win this round is the Revolt Trick, you are
+                    <strong>still eligible</strong>
+                    for the Black Crown.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Final round</div>
+                  <div class="val">+30 pt per trick won (in addition to Revolt scoring).</div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="row gap-4">
+                  <div class="token kakumei">革</div>
+                  <div class="col gap-2" style="text-align: left;">
+                    <div
+                      class="mono"
+                      style="font-size: 11px; letter-spacing: 0.12em; color: var(--ink-mute);"
+                    >
+                      REVOLT TOKEN
+                    </div>
+                    <div class="h-4">Place on your played card</div>
+                    <div class="body-sm muted">
+                      Strength inverts — only for that single trick.
+                    </div>
+                  </div>
+                </div>
+                <div class="example">
+                  <div class="title">Example: Revolt active</div>
+                  <div class="cards-row" id="kakumei-example">
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">7</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">7</div>
+                      <div class="corner tr">
+                        <div class="num">7</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">1</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">1</div>
+                      <div class="corner tr">
+                        <div class="num">1</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">4</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">4</div>
+                      <div class="corner tr">
+                        <div class="num">4</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard blue size-sm">
+                      <div class="corner">
+                        <div class="num">2</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">2</div>
+                      <div class="corner tr">
+                        <div class="num">2</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="body-sm muted" style="margin-top: 8px;">
+                    <strong>Red 1 wins</strong> — weakest value takes the trick.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- HERMIT -->
+          <section id="hermit" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar green"></div>
+                <div class="priority-tag">Priority 4A · Dexterous hand</div>
+                <h2 class="name">Hermit</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">1 trick</div>
+                  <div class="v">+100 pt</div>
+                </div>
+                <div>
+                  <div class="l">White Flag beats Rare</div>
+                  <div class="v">+30 pt</div>
+                </div>
+                <div>
+                  <div class="l">Win game</div>
+                  <div class="v">0 tricks</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Ability</div>
+                  <div class="val">
+                    <strong>Before each trick</strong>, draw a card from the deck and discard one from hand. Steady, churn-y control.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">White Flag</div>
+                  <div class="val">
+                    When Hermit plays the White Flag, <strong>it defeats the Rare card</strong>. Each successful play scores
+                    <strong>+30 pt instantly</strong>
+                    (or +100 in the final round) — even if you lose the trick.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Score (end of round)</div>
+                  <div class="val">
+                    Sweet spot is exactly one trick.
+                    <div class="tier-row">
+                      <div class="tier">
+                        <div class="label">0</div>
+                        <div class="v">+50</div>
+                      </div>
+                      <div class="tier highlight">
+                        <div class="label">1</div>
+                        <div class="v">+100</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">2</div>
+                        <div class="v">+70</div>
+                      </div>
+                      <div class="tier lose">
+                        <div class="label">3</div>
+                        <div class="v">−10</div>
+                      </div>
+                      <div class="tier lose">
+                        <div class="label">4</div>
+                        <div class="v">−30</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Win</div>
+                  <div class="val">
+                    Win <strong>0 tricks</strong> in any round (eligible for Black Crown).
+                  </div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="example" style="width: 100%;">
+                  <div class="title">Example: White Flag beats Rare</div>
+                  <div class="cards-row" id="hermit-example">
+                    <div class="pcard rare size-sm">
+                      <div class="corner">
+                        <div class="num">R</div>
+                      </div>
+                      <div class="center">★</div>
+                      <div class="corner tr">
+                        <div class="num">R</div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard white-flag size-sm">
+                      <div class="corner">
+                        <div class="num">⚑</div>
+                      </div>
+                      <div class="center">⚑</div>
+                      <div class="corner tr">
+                        <div class="num">⚑</div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard blue size-sm">
+                      <div class="corner">
+                        <div class="num">4</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">4</div>
+                      <div class="corner tr">
+                        <div class="num">4</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard green size-sm">
+                      <div class="corner">
+                        <div class="num">7</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">7</div>
+                      <div class="corner tr">
+                        <div class="num">7</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="body-sm muted" style="margin-top: 8px;">
+                    Rare led, Hermit follows with White Flag → <strong>White Flag wins the trick</strong>.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- BERSERKER -->
+          <section id="berserker" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar brown"></div>
+                <div class="priority-tag">Priority 5A · Fierce uplifting</div>
+                <h2 class="name">Berserker</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">1 trick</div>
+                  <div class="v">+80 pt</div>
+                </div>
+                <div>
+                  <div class="l">Win game</div>
+                  <div class="v">0 tricks</div>
+                </div>
+                <div>
+                  <div class="l">Loses to</div>
+                  <div class="v">any 1</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Setup</div>
+                  <div class="val">
+                    <strong>You always start with the Berserker card.</strong>
+                    Discard your other 4 cards and draw 4 random cards from the Berserker Exclusive Deck.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Exclusive deck</div>
+                  <div class="val">
+                    7 cards: <strong>10 of Red, Blue, Green, Black</strong>, plus a <strong>Rare</strong>, a <strong>White Flag</strong>, and the
+                    <strong>Berserker</strong>
+                    card itself.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">10s</div>
+                  <div class="val">
+                    A 10 is the highest non-Rare card of its color — but it <strong>loses to the 1 of the same color</strong>. The 1 always beats the 10.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Berserker card</div>
+                  <div class="val">
+                    Beats every Rare and Number card — including Hermit's White-Flag-beats-Rare. Plays any time, ignoring must-follow.
+                    <strong>Loses to any 1</strong>
+                    (Red, Blue, Green, or Black).
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Score</div>
+                  <div class="val">
+                    Win zero, win the game.
+                    <div class="tier-row">
+                      <div class="tier win">
+                        <div class="label">0</div>
+                        <div class="v">WIN</div>
+                      </div>
+                      <div class="tier highlight">
+                        <div class="label">1</div>
+                        <div class="v">+80</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">2</div>
+                        <div class="v">+50</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">3</div>
+                        <div class="v">+30</div>
+                      </div>
+                      <div class="tier lose">
+                        <div class="label">4</div>
+                        <div class="v">−30</div>
+                      </div>
+                      <div class="tier lose">
+                        <div class="label">5</div>
+                        <div class="v">−50</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Final round</div>
+                  <div class="val">
+                    You may spend a Black Crown to discard 1–2 cards and redraw from the 2 unselected Berserker deck cards.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Win</div>
+                  <div class="val">
+                    Win <strong>0 tricks</strong>
+                    in a round. King's 5-trick win takes precedence on simultaneous trigger.
+                  </div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="berserker-deck" id="berserker-deck">
+                  <div class="pcard rare size-sm">
+                    <div class="corner">
+                      <div class="num">B</div>
+                    </div>
+                    <div class="center">⚔</div>
+                    <div class="corner tr">
+                      <div class="num">B</div>
+                    </div>
+                  </div>
+                  <div class="pcard red size-sm">
+                    <div class="corner">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                    <div class="center">10</div>
+                    <div class="corner tr">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                  </div>
+                  <div class="pcard blue size-sm">
+                    <div class="corner">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                    <div class="center">10</div>
+                    <div class="corner tr">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                  </div>
+                  <div class="pcard green size-sm">
+                    <div class="corner">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                    <div class="center">10</div>
+                    <div class="corner tr">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                  </div>
+                  <div class="pcard black size-sm">
+                    <div class="corner">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                    <div class="center">10</div>
+                    <div class="corner tr">
+                      <div class="num">10</div>
+                      <div class="pip"></div>
+                    </div>
+                  </div>
+                  <div class="pcard rare size-sm">
+                    <div class="corner">
+                      <div class="num">R</div>
+                    </div>
+                    <div class="center">★</div>
+                    <div class="corner tr">
+                      <div class="num">R</div>
+                    </div>
+                  </div>
+                  <div class="pcard white-flag size-sm">
+                    <div class="corner">
+                      <div class="num">⚑</div>
+                    </div>
+                    <div class="center">⚑</div>
+                    <div class="corner tr">
+                      <div class="num">⚑</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="caption emphasis">
+                  <strong>Berserker Exclusive Deck — 7 cards.</strong>
+                  The Berserker card + a 10 of each color + a Rare + a White Flag. The 10s are powerful but lose to the 1 of their own color.
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- ADVENTURER -->
+          <section id="adventurer" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar"></div>
+                <div class="priority-tag">Priority 3B · Items</div>
+                <h2 class="name">Adventurer</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">3 tricks</div>
+                  <div class="v">+40 pt</div>
+                </div>
+                <div>
+                  <div class="l">Win game</div>
+                  <div class="v">5 tricks</div>
+                </div>
+                <div>
+                  <div class="l">Items</div>
+                  <div class="v">2 initial slots</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Setup</div>
+                  <div class="val">
+                    Place 2 Initial Equipment cards: <strong>1 Blue item</strong>
+                    (Map of Destiny / Potion of Invisibility / Timid Boots) and
+                    <strong>1 Red item</strong>
+                    (Miracle Sword / Ruler's Wand / Berserker Axe).
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Use</div>
+                  <div class="val">
+                    One item per turn. After use, draw a replacement from the Item deck. Items only affect the Adventurer.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Level up</div>
+                  <div class="val">
+                    Each trick won grants a new Equipment slot — immediately drawn into.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Score</div>
+                  <div class="val">
+                    Items add/subtract on top of these.
+                    <div class="tier-row">
+                      <div class="tier">
+                        <div class="label">0</div>
+                        <div class="v">+20</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">1</div>
+                        <div class="v">+10</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">2</div>
+                        <div class="v">+20</div>
+                      </div>
+                      <div class="tier">
+                        <div class="label">3</div>
+                        <div class="v">+40</div>
+                      </div>
+                      <div class="tier highlight">
+                        <div class="label">4</div>
+                        <div class="v">+60</div>
+                      </div>
+                      <div class="tier win">
+                        <div class="label">5</div>
+                        <div class="v">WIN</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Win</div>
+                  <div class="val">Win <strong>all 5 tricks</strong> in a round.</div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="item-grid" id="adv-items">
+                  <div class="pcard item size-sm">
+                    <div class="center">✦</div>
+                    <div class="label">Crystal</div>
+                  </div>
+                  <div class="pcard item size-sm">
+                    <div class="center">✶</div>
+                    <div class="label">Map of Destiny</div>
+                  </div>
+                  <div class="pcard item size-sm">
+                    <div class="center">✷</div>
+                    <div class="label">Miracle Sword</div>
+                  </div>
+                  <div class="pcard item size-sm">
+                    <div class="center">✚</div>
+                    <div class="label">Ruler's Wand</div>
+                  </div>
+                  <div class="pcard item size-sm">
+                    <div class="center">❋</div>
+                    <div class="label">Timid Boots</div>
+                  </div>
+                  <div class="pcard item size-sm">
+                    <div class="center">✻</div>
+                    <div class="label">Fairy Mischief</div>
+                  </div>
+                </div>
+                <div class="caption">
+                  A few of the 15 item cards. <strong>Crystal +30</strong>, <strong>Discovered Gold +30</strong>, <strong>Fairy Mischief −30</strong>,
+                  <em>Ruler's Wand</em>
+                  sets your number to 10, etc.
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- COLLECTOR -->
+          <section id="collector" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar blue"></div>
+                <div class="priority-tag">Priority 4B · Set collection</div>
+                <h2 class="name">Collector</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">Reserves</div>
+                  <div class="v">1 / trick</div>
+                </div>
+                <div>
+                  <div class="l">Best combo</div>
+                  <div class="v">Straight Flush 9</div>
+                </div>
+                <div>
+                  <div class="l">Crowns</div>
+                  <div class="v">None</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Reserve</div>
+                  <div class="val">
+                    Place the Reservation Token on a card in any trick. When another player wins it, you receive <strong>only that reserved card</strong>.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Combos</div>
+                  <div class="val">
+                    Up to <strong>3 combos</strong>
+                    from collected cards. Only one Rare per combo (acts as wild).
+                    <div class="chip-row">
+                      <span class="chip">
+                        <span class="k">Flush 3</span><span class="v">+20</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">Straight 3</span><span class="v">+30</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">3 of a kind</span><span class="v">+40</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">Straight Flush 3</span><span class="v">+50</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">4 of a kind</span><span class="v">+80</span>
+                      </span>
+                      <span class="chip">
+                        <span class="k">Straight Flush 5</span><span class="v">+100</span>
+                      </span>
+                      <span class="chip win">
+                        <span class="k">Straight Flush 9</span><span class="v">WIN</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Penalty</div>
+                  <div class="val">
+                    Every <strong>2 unused</strong>
+                    collected cards: <strong>−10 pt</strong>. Don't over-hoard.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Limit</div>
+                  <div class="val">Cannot earn Crowns or Black Crowns. Pure point play.</div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="stack" style="margin-bottom: 8px;">
+                  <div class="token reservation">予</div>
+                </div>
+                <div class="example" style="width: 100%;">
+                  <div class="title">Sample combination · Straight Flush 5</div>
+                  <div class="cards-row" id="collector-example">
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">3</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">3</div>
+                      <div class="corner tr">
+                        <div class="num">3</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">4</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">4</div>
+                      <div class="corner tr">
+                        <div class="num">4</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">5</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">5</div>
+                      <div class="corner tr">
+                        <div class="num">5</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">6</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">6</div>
+                      <div class="corner tr">
+                        <div class="num">6</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                    <span class="arrow"> · </span>
+                    <div class="pcard red size-sm">
+                      <div class="corner">
+                        <div class="num">7</div>
+                        <div class="pip"></div>
+                      </div>
+                      <div class="center">7</div>
+                      <div class="corner tr">
+                        <div class="num">7</div>
+                        <div class="pip"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="body-sm muted" style="margin-top: 8px;">
+                    Five consecutive Red cards: <strong>+100 pt</strong>.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+<!-- RULER -->
+          <section id="ruler" class="char-section">
+            <div class="char-head">
+              <div>
+                <div class="accent-bar ink"></div>
+                <div class="priority-tag">Priority 5B · Tasks</div>
+                <h2 class="name">Ruler</h2>
+              </div>
+              <div class="quick-stats">
+                <div>
+                  <div class="l">Task cards</div>
+                  <div class="v">6 total</div>
+                </div>
+                <div>
+                  <div class="l">Co-op</div>
+                  <div class="v">Mirrors others</div>
+                </div>
+                <div>
+                  <div class="l">All complete</div>
+                  <div class="v">Win game</div>
+                </div>
+              </div>
+            </div>
+            <div class="char-body">
+              <div class="mech-list">
+                <div class="row-item">
+                  <div class="key">Ability</div>
+                  <div class="val">
+                    After everyone sets up, hand <strong>one Task card to each opponent</strong>. They score the task's points; <strong>Ruler scores the same</strong>. Cooperative.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Difficulty</div>
+                  <div class="val">
+                    Each task has a <strong>Normal</strong>
+                    side (+10 / −10) and a <strong>Hard</strong>
+                    side (+20 / −10). Choose when assigning.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Tasks</div>
+                  <div class="val">
+                    All tasks completed · Take a Black card · Win only 1 trick ·
+                    <strong>Win 2+ tricks with no Red/Blue/Green</strong>
+                    → win the game.
+                  </div>
+                </div>
+                <div class="row-item">
+                  <div class="key">Win</div>
+                  <div class="val">
+                    All players (Ruler included) <strong>complete their tasks</strong>
+                    in the same round.
+                  </div>
+                </div>
+              </div>
+              <div class="card-display">
+                <div class="stack" id="task-cards">
+                  <div class="pcard task" style="--w: 100px; --h: 140px;">
+                    <div class="corner">
+                      <div class="num">任</div>
+                    </div>
+                    <div class="center">Take a Black card</div>
+                    <div class="corner tr">
+                      <div class="num">任</div>
+                    </div>
+                  </div>
+                  <div class="pcard task" style="--w: 100px; --h: 140px;">
+                    <div class="corner">
+                      <div class="num">任</div>
+                    </div>
+                    <div class="center">Take only 1 trick</div>
+                    <div class="corner tr">
+                      <div class="num">任</div>
+                    </div>
+                  </div>
+                  <div class="pcard task" style="--w: 100px; --h: 140px;">
+                    <div class="corner">
+                      <div class="num">任</div>
+                    </div>
+                    <div class="center">Do not take Red</div>
+                    <div class="corner tr">
+                      <div class="num">任</div>
+                    </div>
+                  </div>
+                  <div class="pcard task" style="--w: 100px; --h: 140px;">
+                    <div class="corner">
+                      <div class="num">任</div>
+                    </div>
+                    <div class="center">Complete all tasks</div>
+                    <div class="corner tr">
+                      <div class="num">任</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="caption">
+                  Distribute tasks based on opponents' characters: "take" tasks to King &amp; Berserker, "do not take" to Hermit &amp; Resistance.
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</Layouts.app>

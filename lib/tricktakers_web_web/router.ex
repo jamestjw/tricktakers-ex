@@ -17,8 +17,11 @@ defmodule TricktakersWebWeb.Router do
   scope "/", TricktakersWebWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
-    get "/:name", PageController, :screen
+    live "/", LobbyLive, :landing
+    live "/lobby", LobbyLive, :index
+    live "/characters", CharactersLive, :index
+    live "/rooms/:code", RoomLive, :show
+    live "/games/:code", GameLive, :show
   end
 
   # Other scopes may use custom stacks.

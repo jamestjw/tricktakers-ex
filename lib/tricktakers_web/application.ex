@@ -11,6 +11,7 @@ defmodule TricktakersWeb.Application do
       TricktakersWebWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:tricktakers_web, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: TricktakersWeb.PubSub},
+      TricktakersWeb.RoomRegistry,
       # Start a worker by calling: TricktakersWeb.Worker.start_link(arg)
       # {TricktakersWeb.Worker, arg},
       # Start to serve requests, typically the last entry
