@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Profile</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app" data-screen-label="07 Profile">
+    <div id="bar"></div>
+    <main class="page">
+      <!-- Header -->
+      <div class="row gap-5" style="margin-bottom: 48px; align-items: flex-end;">
+        <div style="width: 120px; height: 120px; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; font-family: var(--font-display); font-size: 56px;">H</div>
+        <div>
+          <div class="eyebrow">Joined Mar 2026 · Tokyo</div>
+          <h1 class="h-1" style="margin-top: 6px;">Hiroken</h1>
+          <div class="row gap-3" style="margin-top: 8px;">
+            <span class="pill">142 games</span>
+            <span class="pill">38 wins</span>
+            <span class="pill solid">26.8% win rate</span>
+          </div>
+        </div>
+        <div class="right" style="margin-left: auto;">
+          <button class="btn ghost">Edit profile</button>
+        </div>
+      </div>
+
+      <!-- Stat row -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px;">
+        <div class="panel">
+          <div class="eyebrow">Crowns</div>
+          <div style="font-family: var(--font-display); font-size: 56px; line-height: 1; margin-top: 6px;">42</div>
+          <div class="body-sm muted">↑ 12 this month</div>
+        </div>
+        <div class="panel">
+          <div class="eyebrow">Black crowns</div>
+          <div style="font-family: var(--font-display); font-size: 56px; line-height: 1; margin-top: 6px;">19</div>
+          <div class="body-sm muted">Berserker mostly</div>
+        </div>
+        <div class="panel">
+          <div class="eyebrow">Avg score</div>
+          <div style="font-family: var(--font-display); font-size: 56px; line-height: 1; margin-top: 6px;">187</div>
+          <div class="body-sm muted">Across 3-round games</div>
+        </div>
+        <div class="panel">
+          <div class="eyebrow">Best streak</div>
+          <div style="font-family: var(--font-display); font-size: 56px; line-height: 1; margin-top: 6px;">7</div>
+          <div class="body-sm muted">Wins · Mar 12–18</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px;">
+        <!-- Character mastery -->
+        <section>
+          <div class="row between" style="margin-bottom: 16px;">
+            <div class="eyebrow">Character mastery</div>
+            <span class="body-sm muted">Win rate by character</span>
+          </div>
+          <div class="col gap-3">
+            <div id="mastery"></div>
+          </div>
+        </section>
+
+        <!-- Recent games -->
+        <section>
+          <div class="row between" style="margin-bottom: 16px;">
+            <div class="eyebrow">Recent games</div>
+            <a class="body-sm muted" href="#" style="text-decoration: none;">View all →</a>
+          </div>
+          <div class="col gap-2" id="games"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("profile");
+
+    // Mastery bars
+    const mastery = [
+      { id: "king",       games: 38, win: 0.42 },
+      { id: "hermit",     games: 31, win: 0.39 },
+      { id: "berserker",  games: 22, win: 0.32 },
+      { id: "gambler",    games: 18, win: 0.22 },
+      { id: "resistance", games: 14, win: 0.21 },
+      { id: "adventurer", games: 11, win: 0.18 },
+      { id: "collector",  games: 5,  win: 0.40 },
+      { id: "ruler",      games: 3,  win: 0.33 },
+    ];
+    const m = document.getElementById("mastery");
+    mastery.forEach(r => {
+      const c = TT.charById(r.id);
+      const pct = Math.round(r.win * 100);
+      m.insertAdjacentHTML("beforeend", `
+        <div style="display: grid; grid-template-columns: 140px 1fr 80px 60px; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--hair);">
+          <div>
+            <div class="h-4">${c.name}</div>
+            <div class="body-sm muted">${c.priority}</div>
+          </div>
+          <div style="height: 8px; background: var(--paper-2); border-radius: 999px; overflow: hidden;">
+            <div style="width: ${pct * 1.6}%; height: 100%; background: var(--ink);"></div>
+          </div>
+          <div class="mono" style="text-align: right;">${pct}% win</div>
+          <div class="mono muted body-sm" style="text-align: right;">${r.games} g</div>
+        </div>
+      `);
+    });
+
+    // Recent games
+    const games = [
+      { date: "Apr 28 · 14:22", char: "King",      result: "win",  score: 240, opp: "akari, ryan_c, fumi" },
+      { date: "Apr 28 · 13:55", char: "Hermit",    result: "loss", score: 110, opp: "akari, marcellus" },
+      { date: "Apr 27 · 21:08", char: "Berserker", result: "win",  score: 180, opp: "ryan_c, kasumi" },
+      { date: "Apr 27 · 20:30", char: "Gambler",   result: "loss", score: 60,  opp: "akari, fumi, mei" },
+      { date: "Apr 26 · 19:14", char: "King",      result: "win",  score: 280, opp: "tetsuya, ryan_c" },
+      { date: "Apr 26 · 18:44", char: "Resistance",result: "loss", score: 90,  opp: "akari, fumi, marcellus" },
+    ];
+    const gl = document.getElementById("games");
+    games.forEach(g => {
+      const win = g.result === "win";
+      gl.insertAdjacentHTML("beforeend", `
+        <div class="room" style="padding: 12px 16px;">
+          <div class="meta">
+            <div class="row gap-3">
+              <span class="name">${g.char}</span>
+              <span class="pill ${win ? 'gold' : ''}">${win ? 'Won' : 'Lost'}</span>
+            </div>
+            <div class="sub">
+              <span>${g.date}</span>
+              <span>vs ${g.opp}</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="mono">${g.score}pt</span>
+          </div>
+        </div>
+      `);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Character Select</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app" data-screen-label="03 Setup">
+    <div id="bar"></div>
+    <main class="page-wide">
+      <div class="row between" style="align-items: flex-end; margin-bottom: 32px;">
+        <div>
+          <div class="eyebrow">Round 2 of 3 · Setup phase</div>
+          <h1 class="h-1" style="margin-top: 6px;">Choose your character.</h1>
+          <p class="body" style="color: var(--ink-mute); margin-top: 8px; max-width: 60ch;">
+            Each round you sign a contract. Your character defines how you score &mdash; and what it takes to win the game outright.
+          </p>
+        </div>
+        <div class="status-row">
+          <span class="dots">
+            <span class="dot done"></span>
+            <span class="dot now"></span>
+            <span class="dot"></span>
+          </span>
+          <div class="sep"></div>
+          <span><strong class="mono">akari</strong> picks first</span>
+          <div class="sep"></div>
+          <span class="mono muted">00:42</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 320px; gap: 32px;">
+        <!-- Character grid -->
+        <div>
+          <div class="row gap-3" style="margin-bottom: 16px;">
+            <span class="pill solid">Basic (5)</span>
+            <span class="pill">Adventurer</span>
+            <span class="pill">Collector</span>
+            <span class="pill">Ruler</span>
+          </div>
+          <div id="grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;"></div>
+
+          <!-- Hand preview -->
+          <div style="margin-top: 32px;">
+            <div class="eyebrow" style="margin-bottom: 12px;">Your hand for this round</div>
+            <div class="panel-soft">
+              <div id="hand-preview" class="row gap-3" style="justify-content: center;"></div>
+              <div class="body-sm" style="text-align: center; margin-top: 12px;">
+                Strong on Black 1 &amp; Red. Consider <strong style="color: var(--ink);">King</strong> or <strong style="color: var(--ink);">Berserker</strong>.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail / confirm -->
+        <aside class="col gap-4" style="position: sticky; top: 80px; align-self: start;">
+          <div class="panel">
+            <div class="eyebrow">Selection</div>
+            <div id="detail" style="margin-top: 12px;"></div>
+            <div class="divider"></div>
+            <button id="confirm" class="btn lg" style="width: 100%;">Confirm character</button>
+            <button class="btn ghost sm" style="width: 100%; margin-top: 8px;">View full rules</button>
+          </div>
+
+          <div class="panel-soft">
+            <div class="eyebrow">Standings</div>
+            <div class="col gap-3" style="margin-top: 12px;">
+              <div class="row between">
+                <div class="row gap-2"><span class="avatar a4" style="width:24px;height:24px;font-size:11px;">H</span> Hiroken</div>
+                <div class="row gap-2"><span class="crown">♛</span><span class="mono">120</span></div>
+              </div>
+              <div class="row between">
+                <div class="row gap-2"><span class="avatar a1" style="width:24px;height:24px;font-size:11px;">A</span> akari</div>
+                <div class="row gap-2"><span class="mono">90</span></div>
+              </div>
+              <div class="row between">
+                <div class="row gap-2"><span class="avatar a2" style="width:24px;height:24px;font-size:11px;">R</span> ryan_c</div>
+                <div class="row gap-2"><span class="crown black">♛</span><span class="mono">60</span></div>
+              </div>
+              <div class="row between">
+                <div class="row gap-2"><span class="avatar a3" style="width:24px;height:24px;font-size:11px;">F</span> fumi</div>
+                <div class="row gap-2"><span class="mono">30</span></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("setup");
+
+    // Render character grid (basic 5 + adventurer/collector/ruler)
+    const grid = document.getElementById("grid");
+    const taken = { berserker: true }; // ryan already picked Berserker
+    TT.CHARACTERS.forEach(c => {
+      grid.insertAdjacentHTML("beforeend", TT.charCard(c, { taken: !!taken[c.id] }));
+    });
+
+    // Hand preview
+    const hand = [
+      { suit: "red", value: 9, kind: "number" },
+      { suit: "red", value: 4, kind: "number" },
+      { suit: "blue", value: 2, kind: "number" },
+      { suit: "black", value: 1, kind: "number" },
+      { kind: "rare" },
+    ];
+    document.getElementById("hand-preview").innerHTML = hand.map(c => TT.pcard({ ...c, size: "sm" })).join("");
+
+    // Selection logic
+    let selectedId = "king";
+    function renderDetail() {
+      const c = TT.charById(selectedId);
+      document.getElementById("detail").innerHTML = `
+        <div class="h-2" style="margin: 4px 0 4px;">${c.name}</div>
+        <div class="muted body-sm">${c.priority} · ${c.tag}</div>
+        <p class="body" style="margin-top: 14px;">${c.ability}</p>
+        <div class="divider"></div>
+        <div class="row between">
+          <span class="muted body-sm">Score</span>
+          <span class="mono">${c.points}</span>
+        </div>
+        <div class="row between" style="margin-top: 6px;">
+          <span class="muted body-sm">Win condition</span>
+          <span class="body-sm" style="text-align: right; max-width: 60%;">${c.win}</span>
+        </div>
+      `;
+    }
+    function pick(id) {
+      if (taken[id]) return;
+      selectedId = id;
+      grid.querySelectorAll(".char-card").forEach(el => {
+        el.classList.toggle("selected", el.dataset.id === id);
+      });
+      renderDetail();
+    }
+    grid.addEventListener("click", e => {
+      const card = e.target.closest(".char-card");
+      if (card && !card.classList.contains("taken")) pick(card.dataset.id);
+    });
+    pick("king");
+
+    document.getElementById("confirm").addEventListener("click", () => {
+      window.location.href = "table.html";
+    });
+  </script>
+</body>
+</html>

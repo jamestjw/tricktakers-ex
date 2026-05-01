@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Trick Resolved</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <style>
+    body { background: var(--paper-2); }
+    .resolve {
+      min-height: calc(100vh - 60px);
+      display: grid;
+      place-items: center;
+      padding: 48px;
+    }
+    .resolve-card {
+      background: var(--paper);
+      border-radius: var(--r-xl);
+      box-shadow: var(--sh-3);
+      padding: 48px 56px;
+      max-width: 880px;
+      width: 100%;
+      text-align: center;
+    }
+    .winner-row {
+      display: flex; justify-content: center; gap: 18px; margin: 32px 0;
+    }
+    .winner-row .pcard {
+      transition: transform 600ms cubic-bezier(.2,.8,.2,1);
+    }
+    .winner-row .pcard.won {
+      transform: translateY(-12px) scale(1.06);
+      box-shadow: 0 32px 48px -16px rgba(24,23,21,0.32);
+    }
+    .winner-row .pcard.lost {
+      opacity: 0.42;
+      filter: saturate(0.6);
+    }
+    .play-meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      color: var(--ink-mute);
+      margin-top: 8px;
+    }
+    .winner-banner {
+      display: inline-flex; align-items: center; gap: 12px;
+      padding: 8px 16px;
+      background: var(--ink); color: var(--paper);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .progress {
+      display: flex; gap: 24px; justify-content: center; margin-top: 24px;
+    }
+    .progress .item {
+      text-align: center;
+    }
+    .progress .item .v { font-family: var(--font-mono); font-size: 22px; }
+    .progress .item .l { font-size: 11px; letter-spacing: 0.12em; color: var(--ink-mute); text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="app" data-screen-label="05 Trick Resolved">
+    <div id="bar"></div>
+    <div class="resolve">
+      <div class="resolve-card">
+        <div class="eyebrow">Round 2 · Trick 3 of 5</div>
+        <h1 class="h-2" style="margin: 12px 0 8px;">
+          <span class="winner-banner"><span style="color: var(--gold);">●</span> ryan_c takes the trick</span>
+        </h1>
+        <p class="body" style="color: var(--ink-mute); max-width: 48ch; margin: 8px auto 0;">
+          Black 1 beats Red — even when Red was led. Berserker would have lost to Red 1, but no 1 of Red was held.
+        </p>
+
+        <div class="winner-row">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div id="c1"></div>
+            <div class="play-meta">akari · LEAD</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div id="c2"></div>
+            <div class="play-meta">fumi</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div id="c3"></div>
+            <div class="play-meta" style="color: var(--gold-deep); font-weight: 600;">ryan_c · WINS</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div id="c4"></div>
+            <div class="play-meta">Hiroken</div>
+          </div>
+        </div>
+
+        <div class="divider" style="margin: 16px auto 24px; max-width: 320px;"></div>
+
+        <div class="progress">
+          <div class="item"><div class="v">2</div><div class="l">akari · tricks</div></div>
+          <div class="item"><div class="v">0</div><div class="l">fumi · tricks</div></div>
+          <div class="item"><div class="v">1</div><div class="l">ryan_c · tricks</div></div>
+          <div class="item"><div class="v">0</div><div class="l">Hiroken · tricks</div></div>
+        </div>
+
+        <div class="row center-x gap-3" style="margin-top: 32px;">
+          <a class="btn ghost" href="table.html">← Back to table</a>
+          <a class="btn" href="table.html">Next trick →</a>
+        </div>
+        <div class="body-sm" style="margin-top: 12px; color: var(--ink-faint);">
+          ryan_c leads next · auto-advancing in <span class="mono">3s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("trick");
+
+    document.getElementById("c1").innerHTML = TT.pcard({ suit: "red", value: 5, kind: "number" });
+    document.getElementById("c2").innerHTML = TT.pcard({ suit: "red", value: 2, kind: "number" });
+    document.getElementById("c3").innerHTML = TT.pcard({ suit: "black", value: 1, kind: "number" });
+    document.getElementById("c4").innerHTML = TT.pcard({ suit: "red", value: 4, kind: "number" });
+
+    // Animate winner highlight
+    setTimeout(() => {
+      document.querySelectorAll("#c1, #c2, #c4").forEach(el => el.firstElementChild.classList.add("lost"));
+      document.getElementById("c3").firstElementChild.classList.add("won");
+    }, 250);
+  </script>
+</body>
+</html>

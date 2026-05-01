@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Welcome</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app" data-screen-label="01 Landing">
+    <div id="bar"></div>
+    <main class="page" style="padding-top: 80px;">
+      <div style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 64px; align-items: center;">
+        <div>
+          <div class="eyebrow">A trick-taking card game by Hiroken · 2–5 players</div>
+          <h1 class="h-display" style="margin: 16px 0 24px; max-width: 12ch;">Eight characters.<br>One crown.</h1>
+          <p class="body" style="max-width: 56ch; font-size: 17px; line-height: 1.55; color: var(--ink-2);">
+            Sign a contract with a character each round. Bid, bluff, dexterously discard, declare a revolution. Take the most tricks &mdash;
+            or none at all &mdash; and earn the fame of a true trick-taker.
+          </p>
+          <div class="row gap-3" style="margin-top: 32px;">
+            <a class="btn lg" href="lobby.html">Play now &rarr;</a>
+            <a class="btn lg ghost" href="#how">How to play</a>
+          </div>
+          <div class="row gap-5" style="margin-top: 56px; color: var(--ink-mute); font-size: 13px;">
+            <div class="row gap-2"><span class="mono" style="font-size: 16px; color: var(--ink);">2,418</span> playing now</div>
+            <div class="row gap-2"><span class="mono" style="font-size: 16px; color: var(--ink);">14m</span> avg game</div>
+            <div class="row gap-2"><span class="mono" style="font-size: 16px; color: var(--ink);">8</span> characters</div>
+          </div>
+        </div>
+
+        <!-- Hero card composition -->
+        <div style="position: relative; height: 460px;">
+          <div id="hero-cards"></div>
+        </div>
+      </div>
+
+      <div style="height: 120px;"></div>
+
+      <!-- Three-up of mechanics -->
+      <section id="how">
+        <div class="eyebrow">Anatomy of a round</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 24px;">
+          <div class="panel">
+            <div class="mono" style="font-size: 11px; color: var(--ink-faint); letter-spacing: 0.16em;">01 / DEAL</div>
+            <div class="h-3" style="margin-top: 6px;">Five cards, four colors</div>
+            <p class="body-sm" style="margin-top: 8px;">Black is trump. Same-color tricks resolve high-to-low; off-color cards can&rsquo;t win unless Black.</p>
+          </div>
+          <div class="panel">
+            <div class="mono" style="font-size: 11px; color: var(--ink-faint); letter-spacing: 0.16em;">02 / CONTRACT</div>
+            <div class="h-3" style="margin-top: 6px;">Pick a character</div>
+            <p class="body-sm" style="margin-top: 8px;">Each player chooses a different role with its own scoring rule and ability. Your character is your strategy.</p>
+          </div>
+          <div class="panel">
+            <div class="mono" style="font-size: 11px; color: var(--ink-faint); letter-spacing: 0.16em;">03 / CROWN</div>
+            <div class="h-3" style="margin-top: 6px;">Take tricks &mdash; or none</div>
+            <p class="body-sm" style="margin-top: 8px;">Most tricks earns a Crown. Zero tricks earns a Black Crown. First to two crowns wins the game outright.</p>
+          </div>
+        </div>
+      </section>
+
+      <div style="height: 80px;"></div>
+
+      <!-- Character roster preview -->
+      <section>
+        <div class="row between" style="margin-bottom: 24px;">
+          <div>
+            <div class="eyebrow">The roster</div>
+            <h2 class="h-1" style="margin-top: 6px;">Eight ways to play.</h2>
+          </div>
+          <a class="btn ghost" href="setup.html">See all characters &rarr;</a>
+        </div>
+        <div id="roster" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;"></div>
+      </section>
+    </main>
+
+    <footer style="border-top: 1px solid var(--hair); padding: 32px; text-align: center; color: var(--ink-faint); font-size: 12px;">
+      © 2026 Tricktakers · Original game by Hiroken · Web port unofficial
+    </footer>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("landing");
+
+    // Hero card fan (decorative)
+    const hero = document.getElementById("hero-cards");
+    const heroCards = [
+      { kind: "back",       x: 40,  y: 80,  rot: -16, z: 1 },
+      { suit: "red",   value: 7, kind:"number", x: 100, y: 50,  rot: -8,  z: 2 },
+      { suit: "blue",  value: 5, kind:"number", x: 170, y: 30,  rot: -1,  z: 3 },
+      { kind: "rare",                            x: 240, y: 30,  rot: 6,   z: 4 },
+      { suit: "black", value: 1, kind:"number", x: 310, y: 50,  rot: 14,  z: 3 },
+      { kind: "white-flag",                      x: 70,  y: 240, rot: 8,   z: 2, size: "sm" },
+      { suit: "green", value: 9, kind:"number",  x: 250, y: 260, rot: -10, z: 2, size: "sm" },
+    ];
+    hero.style.position = "relative";
+    hero.style.height = "460px";
+    heroCards.forEach(c => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = TT.pcard(c);
+      const el = wrap.firstElementChild;
+      el.style.position = "absolute";
+      el.style.left = c.x + "px";
+      el.style.top = c.y + "px";
+      el.style.transform = `rotate(${c.rot}deg)`;
+      el.style.zIndex = c.z;
+      hero.appendChild(el);
+    });
+
+    // Roster preview — show 4 characters
+    const roster = document.getElementById("roster");
+    ["king","gambler","resistance","hermit"].forEach(id => {
+      const c = TT.charById(id);
+      roster.insertAdjacentHTML("beforeend", TT.charCard(c));
+    });
+  </script>
+</body>
+</html>

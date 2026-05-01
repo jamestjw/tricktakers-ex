@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Design Overview</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app" data-screen-label="00 Overview">
+    <div id="bar"></div>
+    <main class="page">
+      <div class="eyebrow">Design system · v0.1 · 2026</div>
+      <h1 class="h-display" style="margin: 8px 0 16px; max-width: 14ch;">Tricktakers, on the web.</h1>
+      <p class="body" style="max-width: 60ch; color: var(--ink-mute);">
+        High-fidelity mocks for an online multiplayer port of <em>TRICKTAKERs Hiroken</em>. Modern, minimal, paper-and-ink. All seven screens
+        below are static HTML / CSS / a sprinkle of vanilla JS — port them straight into Phoenix HEEx templates and wire to LiveView.
+      </p>
+
+      <div style="height: 48px;"></div>
+
+      <div class="row between" style="margin-bottom: 16px;">
+        <div class="eyebrow">Screens</div>
+        <div class="body-sm">7 mocks · click any tile</div>
+      </div>
+
+      <div class="screen-grid">
+        <a class="screen-tile" href="landing.html">
+          <div class="num">01 / LANDING</div>
+          <div class="label">Landing</div>
+          <div class="desc">Marketing entry, sign in, quick play.</div>
+        </a>
+        <a class="screen-tile" href="lobby.html">
+          <div class="num">02 / LOBBY</div>
+          <div class="label">Lobby</div>
+          <div class="desc">Browse rooms, create &amp; join.</div>
+        </a>
+        <a class="screen-tile" href="setup.html">
+          <div class="num">03 / SETUP</div>
+          <div class="label">Character Select</div>
+          <div class="desc">Bidding / setup phase before a round.</div>
+        </a>
+        <a class="screen-tile" href="table.html">
+          <div class="num">04 / TABLE</div>
+          <div class="label">Game Table</div>
+          <div class="desc">The play surface — hand, trick, seats.</div>
+        </a>
+        <a class="screen-tile" href="resolve.html">
+          <div class="num">05 / TRICK</div>
+          <div class="label">Trick Resolution</div>
+          <div class="desc">Winner highlight, lead handoff.</div>
+        </a>
+        <a class="screen-tile" href="round.html">
+          <div class="num">06 / ROUND</div>
+          <div class="label">Round Results</div>
+          <div class="desc">Crowns awarded, score breakdown.</div>
+        </a>
+        <a class="screen-tile" href="characters.html">
+          <div class="num">07 / CHARACTERS</div>
+          <div class="label">Characters Codex</div>
+          <div class="desc">All 8 characters, their cards &amp; mechanics.</div>
+        </a>
+        <a class="screen-tile" href="profile.html">
+          <div class="num">08 / PROFILE</div>
+          <div class="label">Player Profile</div>
+          <div class="desc">Stats, character mastery, history.</div>
+        </a>
+      </div>
+
+      <div style="height: 96px;"></div>
+
+      <!-- Design system bits -->
+      <div class="eyebrow">System</div>
+      <h2 class="h-1" style="margin: 8px 0 32px;">Notes</h2>
+
+      <div class="col gap-6" style="max-width: 980px;">
+        <section>
+          <div class="h-3" style="margin-bottom: 12px;">Type</div>
+          <div class="panel-soft col gap-3">
+            <div class="h-display" style="font-size:64px;">Tricktakers</div>
+            <div class="h-1">Round 3 · Final</div>
+            <div class="h-2">Choose a character</div>
+            <div class="h-3">King · 1A</div>
+            <div class="body">Each player plays a card from hand, clockwise. Highest value wins the trick.</div>
+            <div class="mono">Black 1 · Red 9 · Blue 7 · Green 4</div>
+          </div>
+        </section>
+
+        <section>
+          <div class="h-3" style="margin-bottom: 12px;">Suits &amp; cards</div>
+          <div class="panel-soft" style="display:flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+            <div id="card-row"></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="h-3" style="margin-bottom: 12px;">Crowns</div>
+          <div class="panel-soft row gap-4">
+            <span class="crown">♛</span>
+            <span class="crown">♛</span>
+            <span class="crown empty">♛</span>
+            <div style="width:24px;"></div>
+            <span class="crown black">♛</span>
+            <span class="crown black">♛</span>
+            <span class="crown black">♛</span>
+            <div class="body-sm" style="margin-left: 24px;">2 crowns or 3 black crowns wins the game.</div>
+          </div>
+        </section>
+
+        <section>
+          <div class="h-3" style="margin-bottom: 12px;">Buttons &amp; controls</div>
+          <div class="panel-soft row gap-3" style="flex-wrap: wrap;">
+            <button class="btn">Play card</button>
+            <button class="btn ghost">Cancel</button>
+            <button class="btn gold">Declare Kakumei</button>
+            <button class="btn lg">Create room</button>
+            <button class="btn sm">+1</button>
+            <span class="pill">Round 2 of 3</span>
+            <span class="pill solid">Lead</span>
+            <span class="pill gold">Crown</span>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("overview");
+
+    const cards = [
+      { suit: "red", value: 9, kind: "number" },
+      { suit: "blue", value: 5, kind: "number" },
+      { suit: "green", value: 3, kind: "number" },
+      { suit: "black", value: 1, kind: "number" },
+      { kind: "rare" },
+      { kind: "white-flag" },
+      { kind: "back" },
+    ];
+    document.getElementById("card-row").innerHTML = cards.map(c => TT.pcard(c)).join("");
+  </script>
+</body>
+</html>

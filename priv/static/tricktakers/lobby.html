@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Lobby</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app" data-screen-label="02 Lobby">
+    <div id="bar"></div>
+    <main class="page">
+      <div class="row between" style="margin-bottom: 32px; align-items: flex-end;">
+        <div>
+          <div class="eyebrow">Lobby</div>
+          <h1 class="h-1" style="margin-top: 6px;">Find a table.</h1>
+        </div>
+        <div class="row gap-3">
+          <button class="btn ghost">Join by code</button>
+          <button class="btn">+ Create room</button>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 240px 1fr; gap: 32px;">
+        <!-- Filters -->
+        <aside class="col gap-5">
+          <div class="col gap-3">
+            <div class="eyebrow">Player count</div>
+            <div class="col gap-2">
+              <label class="row gap-2"><input type="checkbox" checked> 2 players</label>
+              <label class="row gap-2"><input type="checkbox" checked> 3 players</label>
+              <label class="row gap-2"><input type="checkbox" checked> 4 players</label>
+              <label class="row gap-2"><input type="checkbox"> 5 players</label>
+            </div>
+          </div>
+          <div class="col gap-3">
+            <div class="eyebrow">Mode</div>
+            <div class="col gap-2">
+              <label class="row gap-2"><input type="radio" name="mode" checked> Basic (5 chars)</label>
+              <label class="row gap-2"><input type="radio" name="mode"> Advanced (6+ chars)</label>
+              <label class="row gap-2"><input type="radio" name="mode"> Any</label>
+            </div>
+          </div>
+          <div class="col gap-3">
+            <div class="eyebrow">Skill</div>
+            <div class="col gap-2">
+              <label class="row gap-2"><input type="checkbox" checked> Beginner</label>
+              <label class="row gap-2"><input type="checkbox" checked> Intermediate</label>
+              <label class="row gap-2"><input type="checkbox"> Expert</label>
+            </div>
+          </div>
+          <button class="btn ghost sm" style="align-self: flex-start;">Reset</button>
+        </aside>
+
+        <!-- Rooms -->
+        <section class="col gap-3">
+          <div class="status-row">
+            <span><strong class="mono">14</strong> rooms open</span>
+            <div class="sep"></div>
+            <span class="muted">Sort by</span>
+            <select class="input" style="width: auto; padding: 6px 10px;">
+              <option>Filling up</option>
+              <option>Skill level</option>
+              <option>Newest</option>
+            </select>
+            <span class="right muted body-sm">Auto-refreshing</span>
+          </div>
+
+          <div id="rooms" class="col gap-3"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("lobby");
+
+    const rooms = [
+      { name: "The Hermit's Tavern",   host: "kasumi",     players: "3 / 4", mode: "Basic",    skill: "Intermediate", round: "Waiting" },
+      { name: "Kakumei or Bust",       host: "ryan_c",     players: "2 / 4", mode: "Advanced", skill: "Expert",       round: "Waiting" },
+      { name: "Tuesday Night Gambit",  host: "fumi",       players: "4 / 4", mode: "Basic",    skill: "Intermediate", round: "Round 2" },
+      { name: "Black Crown Society",   host: "tetsuya",    players: "1 / 5", mode: "Advanced", skill: "Beginner",     round: "Waiting" },
+      { name: "First-time players ✿",  host: "akari",      players: "2 / 4", mode: "Basic",    skill: "Beginner",     round: "Waiting" },
+      { name: "Berserker Brawl",       host: "marcellus",  players: "3 / 3", mode: "Basic",    skill: "Expert",       round: "Round 1" },
+      { name: "Slow paper, slow tea",  host: "mei",        players: "2 / 5", mode: "Advanced", skill: "Intermediate", round: "Waiting" },
+    ];
+
+    const list = document.getElementById("rooms");
+    rooms.forEach(r => {
+      const inProgress = r.round !== "Waiting";
+      const full = r.players.split(" / ")[0] === r.players.split(" / ")[1];
+      list.insertAdjacentHTML("beforeend", `
+        <div class="room">
+          <div class="meta">
+            <div class="row gap-3">
+              <span class="name">${r.name}</span>
+              ${inProgress ? '<span class="pill">'+r.round+'</span>' : '<span class="pill solid">Open</span>'}
+            </div>
+            <div class="sub">
+              <span>Host · ${r.host}</span>
+              <span>${r.mode}</span>
+              <span>${r.skill}</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="mono" style="font-size: 14px;">${r.players}</span>
+            ${full || inProgress
+              ? '<button class="btn ghost" disabled style="opacity:.5; cursor:not-allowed;">'+(inProgress?'Watch':'Full')+'</button>'
+              : '<a class="btn" href="setup.html">Join &rarr;</a>'}
+          </div>
+        </div>
+      `);
+    });
+  </script>
+</body>
+</html>

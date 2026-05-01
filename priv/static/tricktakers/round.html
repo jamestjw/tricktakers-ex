@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tricktakers — Round Results</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app" data-screen-label="06 Round Results">
+    <div id="bar"></div>
+    <main class="page">
+      <div class="row between" style="align-items: flex-end; margin-bottom: 32px;">
+        <div>
+          <div class="eyebrow">Round 2 · Complete</div>
+          <h1 class="h-1" style="margin-top: 6px;">akari claims the crown.</h1>
+          <p class="body" style="color: var(--ink-mute); margin-top: 8px;">3 tricks won · Hermit paid out for two White Flag plays beating Rare.</p>
+        </div>
+        <div class="row gap-3">
+          <a class="btn ghost" href="table.html">Replay round</a>
+          <a class="btn" href="setup.html">Continue → Round 3</a>
+        </div>
+      </div>
+
+      <!-- Crown ledger -->
+      <div class="panel" style="margin-bottom: 24px;">
+        <div class="row between">
+          <div>
+            <div class="eyebrow">Crown ledger</div>
+            <div class="body-sm muted">First to 2 crowns or 3 black crowns wins outright.</div>
+          </div>
+          <div class="row gap-5">
+            <div class="row gap-2"><span class="muted body-sm">Crowns</span> <span class="crown">♛</span><span class="crown">♛</span><span class="crown empty">♛</span></div>
+            <div class="row gap-2"><span class="muted body-sm">Black</span> <span class="crown black">♛</span><span class="crown empty black">♛</span><span class="crown empty black">♛</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Players grid -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px;">
+
+        <div class="panel" style="border-color: var(--gold);">
+          <div class="row between">
+            <div class="row gap-3">
+              <span class="avatar a1" style="width:36px; height:36px;">A</span>
+              <div>
+                <div class="h-4">akari</div>
+                <div class="body-sm muted">Hermit · 4A</div>
+              </div>
+            </div>
+            <span class="crown">♛</span>
+          </div>
+          <div class="divider"></div>
+          <table class="scores">
+            <tr><td>3 tricks</td><td class="num muted">—</td></tr>
+            <tr><td>White Flag beats Rare ×2</td><td class="num">+60</td></tr>
+            <tr><td>Round bonus</td><td class="num">+30</td></tr>
+            <tr class="total"><td>Round total</td><td class="num">+90</td></tr>
+          </table>
+          <div class="row between" style="margin-top: 12px;">
+            <span class="muted body-sm">Score</span>
+            <span class="mono" style="font-size: 22px;">180</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="row between">
+            <div class="row gap-3">
+              <span class="avatar a4" style="width:36px; height:36px;">H</span>
+              <div>
+                <div class="h-4">Hiroken</div>
+                <div class="body-sm muted">King · 1A</div>
+              </div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <table class="scores">
+            <tr><td>1 trick</td><td class="num">+80</td></tr>
+            <tr><td>King's privilege</td><td class="num muted">—</td></tr>
+            <tr class="total"><td>Round total</td><td class="num">+80</td></tr>
+          </table>
+          <div class="row between" style="margin-top: 12px;">
+            <span class="muted body-sm">Score</span>
+            <span class="mono" style="font-size: 22px;">200</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="row between">
+            <div class="row gap-3">
+              <span class="avatar a3" style="width:36px; height:36px;">F</span>
+              <div>
+                <div class="h-4">fumi</div>
+                <div class="body-sm muted">Gambler · 2A</div>
+              </div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <table class="scores">
+            <tr><td>Bid 2 · Took 1</td><td class="num" style="color: var(--suit-red);">Missed</td></tr>
+            <tr><td>Bet 50pt</td><td class="num" style="color: var(--suit-red);">−50</td></tr>
+            <tr class="total"><td>Round total</td><td class="num">−50</td></tr>
+          </table>
+          <div class="row between" style="margin-top: 12px;">
+            <span class="muted body-sm">Score</span>
+            <span class="mono" style="font-size: 22px;">40</span>
+          </div>
+        </div>
+
+        <div class="panel" style="border-color: var(--ink);">
+          <div class="row between">
+            <div class="row gap-3">
+              <span class="avatar a2" style="width:36px; height:36px;">R</span>
+              <div>
+                <div class="h-4">ryan_c</div>
+                <div class="body-sm muted">Berserker · 5A</div>
+              </div>
+            </div>
+            <span class="crown black">♛</span>
+          </div>
+          <div class="divider"></div>
+          <table class="scores">
+            <tr><td>0 tricks (target)</td><td class="num">+0</td></tr>
+            <tr><td>Black Crown earned</td><td class="num">—</td></tr>
+            <tr class="total"><td>Round total</td><td class="num">+0</td></tr>
+          </table>
+          <div class="row between" style="margin-top: 12px;">
+            <span class="muted body-sm">Score</span>
+            <span class="mono" style="font-size: 22px;">60</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Trick recap -->
+      <div class="panel">
+        <div class="eyebrow">Trick-by-trick</div>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 16px;">
+          <div class="col gap-2">
+            <div class="body-sm muted">Trick 1</div>
+            <div class="row gap-2" id="t1"></div>
+            <div class="body-sm"><strong>akari</strong> wins · Red 9</div>
+          </div>
+          <div class="col gap-2">
+            <div class="body-sm muted">Trick 2</div>
+            <div class="row gap-2" id="t2"></div>
+            <div class="body-sm"><strong>akari</strong> wins · Black 7</div>
+          </div>
+          <div class="col gap-2">
+            <div class="body-sm muted">Trick 3</div>
+            <div class="row gap-2" id="t3"></div>
+            <div class="body-sm"><strong>Hiroken</strong> · Rare</div>
+          </div>
+          <div class="col gap-2">
+            <div class="body-sm muted">Trick 4</div>
+            <div class="row gap-2" id="t4"></div>
+            <div class="body-sm"><strong>akari</strong> wins · WF beats Rare</div>
+          </div>
+          <div class="col gap-2">
+            <div class="body-sm muted">Trick 5</div>
+            <div class="row gap-2" id="t5"></div>
+            <div class="body-sm"><strong>fumi</strong> wins · Blue 8</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/tt.js"></script>
+  <script>
+    document.getElementById("bar").outerHTML = TT.appBar("round");
+
+    const sm = "sm";
+    function row(id, cards) {
+      document.getElementById(id).innerHTML = cards.map(c => TT.pcard({ ...c, size: sm })).join("");
+    }
+    row("t1", [
+      { suit:"red", value: 9, kind:"number"},
+      { suit:"red", value: 3, kind:"number"},
+      { suit:"red", value: 6, kind:"number"},
+      { suit:"green", value: 8, kind:"number"},
+    ]);
+    row("t2", [
+      { suit:"green", value: 4, kind:"number"},
+      { suit:"black", value: 7, kind:"number"},
+      { suit:"green", value: 2, kind:"number"},
+      { suit:"green", value: 9, kind:"number"},
+    ]);
+    row("t3", [
+      { suit:"red", value: 5, kind:"number"},
+      { suit:"red", value: 2, kind:"number"},
+      { suit:"black", value: 1, kind:"number"},
+      { suit:"red", value: 4, kind:"number"},
+    ]);
+    row("t4", [
+      { kind:"rare"},
+      { suit:"blue", value: 5, kind:"number"},
+      { kind:"white-flag"},
+      { suit:"blue", value: 9, kind:"number"},
+    ]);
+    row("t5", [
+      { suit:"blue", value: 8, kind:"number"},
+      { suit:"blue", value: 3, kind:"number"},
+      { suit:"blue", value: 1, kind:"number"},
+      { suit:"blue", value: 6, kind:"number"},
+    ]);
+  </script>
+</body>
+</html>
