@@ -4,11 +4,12 @@ defmodule TricktakersWebWeb.LobbyLive do
   alias TricktakersWeb.RoomRegistry
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     if connected?(socket), do: RoomRegistry.subscribe_rooms()
 
     {:ok,
      socket
+     |> assign(:player_session_id, session["player_session_id"])
      |> assign(:rooms, RoomRegistry.list_rooms())
      |> assign(:page, :landing)
      |> assign(:create_error, nil)
@@ -30,14 +31,14 @@ defmodule TricktakersWebWeb.LobbyLive do
 
   @impl true
   def handle_event("create_room", %{"room" => params}, socket) do
-    case RoomRegistry.create_room(params) do
+    case RoomRegistry.create_room(params, socket.assigns.player_session_id) do
       {:ok, room} ->
         {:noreply,
          socket
          |> put_flash(:info, "Room created")
          |> assign(:create_error, nil)
          |> assign_create_form()
-         |> push_navigate(to: ~p"/rooms/#{room.code}?name=#{room.host}")}
+         |> push_navigate(to: ~p"/rooms/#{room.code}")}
 
       {:error, reason} ->
         {:noreply, assign(socket, :create_error, reason)}
@@ -47,10 +48,17 @@ defmodule TricktakersWebWeb.LobbyLive do
   def handle_event("join_by_code", %{"join" => params}, socket) do
     code = String.trim(params["code"] || "") |> String.upcase()
     name = String.trim(params["player_name"] || "")
+    room = if code == "", do: nil, else: RoomRegistry.get_room(code)
 
     cond do
       code == "" ->
         {:noreply, assign(socket, :join_error, "Room code is required")}
+
+      room && RoomRegistry.player_in_room?(room, socket.assigns.player_session_id) ->
+        {:noreply,
+         socket
+         |> assign(:join_error, nil)
+         |> push_navigate(to: ~p"/rooms/#{code}")}
 
       name == "" ->
         {:noreply, assign(socket, :join_error, "Player name is required")}

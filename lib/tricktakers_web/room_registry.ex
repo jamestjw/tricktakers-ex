@@ -15,25 +15,39 @@ defmodule TricktakersWeb.RoomRegistry do
     GenServer.call(__MODULE__, {:get_room, code})
   end
 
-  def create_room(attrs) do
-    GenServer.call(__MODULE__, {:create_room, attrs})
+  def create_room(attrs, player_session_id) do
+    GenServer.call(__MODULE__, {:create_room, attrs, player_session_id})
   end
 
-  def join_room(code, player_name) do
-    GenServer.call(__MODULE__, {:join_room, code, player_name})
+  def join_room(code, player_session_id, player_name) do
+    GenServer.call(__MODULE__, {:join_room, code, player_session_id, player_name})
   end
 
-  def start_game(code, player_name) do
-    GenServer.call(__MODULE__, {:start_game, code, player_name})
+  def start_game(code, player_session_id) do
+    GenServer.call(__MODULE__, {:start_game, code, player_session_id})
   end
 
-  def choose_character(code, player_name, character_id) do
-    GenServer.call(__MODULE__, {:choose_character, code, player_name, character_id})
+  def choose_character(code, player_session_id, character_id) do
+    GenServer.call(__MODULE__, {:choose_character, code, player_session_id, character_id})
   end
 
-  def complete_character_setup(code, player_name, attrs) do
-    GenServer.call(__MODULE__, {:complete_character_setup, code, player_name, attrs})
+  def complete_character_setup(code, player_session_id, attrs) do
+    GenServer.call(__MODULE__, {:complete_character_setup, code, player_session_id, attrs})
   end
+
+  def player_name(room, player_session_id) do
+    room
+    |> player_for_session(player_session_id)
+    |> case do
+      nil -> nil
+      player -> player.name
+    end
+  end
+
+  def player_in_room?(room, player_session_id),
+    do: not is_nil(player_for_session(room, player_session_id))
+
+  def player_names(room), do: Enum.map(room.players, & &1.name)
 
   def subscribe_rooms, do: Phoenix.PubSub.subscribe(TricktakersWeb.PubSub, @topic)
   def subscribe_room(code), do: Phoenix.PubSub.subscribe(TricktakersWeb.PubSub, room_topic(code))
@@ -55,8 +69,9 @@ defmodule TricktakersWeb.RoomRegistry do
     {:reply, Map.get(state.rooms, String.upcase(code || "")), state}
   end
 
-  def handle_call({:create_room, attrs}, _from, state) do
+  def handle_call({:create_room, attrs, player_session_id}, _from, state) do
     with {:ok, player_name} <- validate_name(attrs["player_name"]),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
          {:ok, room_name} <- validate_room_name(attrs["room_name"]),
          {:ok, max_players} <- validate_max_players(attrs["max_players"]),
          {:ok, mode} <- validate_mode(attrs["mode"]) do
@@ -66,11 +81,12 @@ defmodule TricktakersWeb.RoomRegistry do
       room = %{
         code: code,
         name: room_name,
+        host_id: valid_session_id,
         host: player_name,
         max_players: max_players,
         mode: mode,
         status: :waiting,
-        players: [player_name],
+        players: [%{id: valid_session_id, name: player_name}],
         inserted_at: now,
         updated_at: now,
         game: nil
@@ -85,18 +101,19 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
-  def handle_call({:join_room, code, player_name}, _from, state) do
+  def handle_call({:join_room, code, player_session_id, player_name}, _from, state) do
     room = Map.get(state.rooms, String.upcase(code || ""))
 
     with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
          {:ok, valid_name} <- validate_name(player_name),
-         :ok <- ensure_waiting(found_room),
-         :ok <- ensure_capacity(found_room, valid_name) do
+         :ok <- ensure_joinable(found_room, valid_session_id),
+         :ok <- ensure_capacity(found_room, valid_session_id) do
       players =
-        if valid_name in found_room.players do
+        if player_in_room?(found_room, valid_session_id) do
           found_room.players
         else
-          found_room.players ++ [valid_name]
+          found_room.players ++ [%{id: valid_session_id, name: valid_name}]
         end
 
       updated_room = %{found_room | players: players, updated_at: DateTime.utc_now()}
@@ -109,20 +126,22 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
-  def handle_call({:start_game, code, player_name}, _from, state) do
+  def handle_call({:start_game, code, player_session_id}, _from, state) do
     room = Map.get(state.rooms, String.upcase(code || ""))
 
     with {:ok, found_room} <- fetch_room(room),
-         {:ok, valid_name} <- validate_name(player_name),
-         :ok <- ensure_host(found_room, valid_name),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         :ok <- ensure_host(found_room, valid_session_id),
          :ok <- ensure_minimum_players(found_room) do
+      player_ids = Enum.map(found_room.players, & &1.id)
+
       game = %{
         started_at: DateTime.utc_now(),
         phase: :character_selection,
         round: 1,
         trick: 1,
-        lead: hd(found_room.players),
-        character_order: found_room.players,
+        lead: hd(player_ids),
+        character_order: player_ids,
         character_picks: %{},
         current_picker_index: 0,
         character_setup_order: [],
@@ -145,17 +164,17 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
-  def handle_call({:choose_character, code, player_name, character_id}, _from, state) do
+  def handle_call({:choose_character, code, player_session_id, character_id}, _from, state) do
     room = Map.get(state.rooms, String.upcase(code || ""))
 
     with {:ok, found_room} <- fetch_room(room),
-         {:ok, valid_name} <- validate_name(player_name),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
          {:ok, game} <- fetch_game(found_room),
          :ok <- ensure_setup_phase(game),
-         :ok <- ensure_current_picker(game, valid_name),
+         :ok <- ensure_current_picker(game, valid_session_id),
          {:ok, valid_character_id} <- validate_character_id(found_room.mode, character_id),
          :ok <- ensure_character_available(game, valid_character_id) do
-      picks = Map.put(game.character_picks, valid_name, valid_character_id)
+      picks = Map.put(game.character_picks, valid_session_id, valid_character_id)
       all_picked? = map_size(picks) == length(game.character_order)
 
       game =
@@ -188,15 +207,17 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
-  def handle_call({:complete_character_setup, code, player_name, attrs}, _from, state) do
+  def handle_call({:complete_character_setup, code, player_session_id, attrs}, _from, state) do
     room = Map.get(state.rooms, String.upcase(code || ""))
 
     with {:ok, found_room} <- fetch_room(room),
-         {:ok, valid_name} <- validate_name(player_name),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
          {:ok, game} <- fetch_game(found_room),
          :ok <- ensure_character_setup_phase(game),
-         :ok <- ensure_current_setup_player(game, valid_name) do
-      setup_done = Map.put(game.character_setup_done, valid_name, normalize_setup_attrs(attrs))
+         :ok <- ensure_current_setup_player(game, valid_session_id) do
+      setup_done =
+        Map.put(game.character_setup_done, valid_session_id, normalize_setup_attrs(attrs))
+
       all_setup? = map_size(setup_done) == length(game.character_setup_order)
 
       game =
@@ -235,6 +256,14 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
+  defp validate_session_id(session_id) do
+    trimmed = String.trim(session_id || "")
+
+    if trimmed == "",
+      do: {:error, "Player session is required"},
+      else: {:ok, trimmed}
+  end
+
   defp validate_room_name(name) do
     trimmed = String.trim(name || "")
 
@@ -262,19 +291,26 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
-  defp ensure_waiting(%{status: :waiting}), do: :ok
-  defp ensure_waiting(_room), do: {:error, "Game already started"}
-
-  defp ensure_capacity(room, player_name) do
+  defp ensure_joinable(room, player_session_id) do
     cond do
-      player_name in room.players -> :ok
+      player_in_room?(room, player_session_id) -> :ok
+      room.status == :waiting -> :ok
+      true -> {:error, "Game already started"}
+    end
+  end
+
+  defp ensure_capacity(room, player_session_id) do
+    cond do
+      player_in_room?(room, player_session_id) -> :ok
       length(room.players) >= room.max_players -> {:error, "Room is full"}
       true -> :ok
     end
   end
 
-  defp ensure_host(room, player_name) do
-    if room.host == player_name, do: :ok, else: {:error, "Only the host can start the game"}
+  defp ensure_host(room, player_session_id) do
+    if room.host_id == player_session_id,
+      do: :ok,
+      else: {:error, "Only the host can start the game"}
   end
 
   defp ensure_minimum_players(room) do
@@ -364,6 +400,12 @@ defmodule TricktakersWeb.RoomRegistry do
   end
 
   defp normalize_setup_attrs(_attrs), do: %{}
+
+  defp player_for_session(nil, _player_session_id), do: nil
+
+  defp player_for_session(room, player_session_id) do
+    Enum.find(room.players, &(&1.id == player_session_id))
+  end
 
   defp unique_code(rooms) do
     code =

@@ -4,9 +4,14 @@ defmodule TricktakersWebWeb.RoomLive do
   alias TricktakersWeb.RoomRegistry
 
   @impl true
-  def mount(params, _session, socket) do
+  def mount(params, session, socket) do
     code = String.upcase(params["code"] || "")
     room = RoomRegistry.get_room(code)
+    player_session_id = session["player_session_id"]
+
+    player_name =
+      (room && RoomRegistry.player_name(room, player_session_id)) ||
+        String.trim(params["name"] || "")
 
     if connected?(socket) and room, do: RoomRegistry.subscribe_room(code)
 
@@ -14,20 +19,21 @@ defmodule TricktakersWebWeb.RoomLive do
      socket
      |> assign(:room, room)
      |> assign(:code, code)
+     |> assign(:player_session_id, player_session_id)
      |> assign(:join_error, nil)
      |> assign(:start_error, nil)
-     |> assign(:player_name, String.trim(params["name"] || ""))
+     |> assign(:player_name, player_name)
      |> assign(:join_form, to_form(%{"player_name" => ""}, as: :join))}
   end
 
   @impl true
   def handle_params(params, _uri, socket) do
-    socket =
-      assign(
-        socket,
-        :player_name,
+    player_name =
+      (socket.assigns.room &&
+         RoomRegistry.player_name(socket.assigns.room, socket.assigns.player_session_id)) ||
         String.trim(params["name"] || socket.assigns.player_name || "")
-      )
+
+    socket = assign(socket, :player_name, player_name)
 
     socket = maybe_join_room(socket)
     {:noreply, socket}
@@ -35,20 +41,24 @@ defmodule TricktakersWebWeb.RoomLive do
 
   @impl true
   def handle_info({:room_updated, room}, socket) do
-    {:noreply, assign(socket, :room, room)}
+    player_name =
+      RoomRegistry.player_name(room, socket.assigns.player_session_id) ||
+        socket.assigns.player_name
+
+    {:noreply, assign(socket, room: room, player_name: player_name)}
   end
 
   @impl true
   def handle_event("join_room", %{"join" => %{"player_name" => name}}, socket) do
     code = socket.assigns.code
 
-    case RoomRegistry.join_room(code, name) do
+    case RoomRegistry.join_room(code, socket.assigns.player_session_id, name) do
       {:ok, _room} ->
         {:noreply,
          socket
          |> assign(:join_error, nil)
          |> assign(:player_name, String.trim(name))
-         |> push_patch(to: ~p"/rooms/#{code}?name=#{String.trim(name)}")}
+         |> push_patch(to: ~p"/rooms/#{code}")}
 
       {:error, reason} ->
         {:noreply, assign(socket, :join_error, reason)}
@@ -56,10 +66,9 @@ defmodule TricktakersWebWeb.RoomLive do
   end
 
   def handle_event("start_game", _params, socket) do
-    case RoomRegistry.start_game(socket.assigns.code, socket.assigns.player_name) do
+    case RoomRegistry.start_game(socket.assigns.code, socket.assigns.player_session_id) do
       {:ok, room} ->
-        {:noreply,
-         push_navigate(socket, to: ~p"/games/#{room.code}?name=#{socket.assigns.player_name}")}
+        {:noreply, push_navigate(socket, to: ~p"/games/#{room.code}")}
 
       {:error, reason} ->
         {:noreply, assign(socket, :start_error, reason)}
@@ -75,13 +84,22 @@ defmodule TricktakersWebWeb.RoomLive do
       name == "" ->
         socket
 
-      name in socket.assigns.room.players ->
-        assign(socket, join_error: nil)
+      RoomRegistry.player_in_room?(socket.assigns.room, socket.assigns.player_session_id) ->
+        assign(
+          socket,
+          player_name:
+            RoomRegistry.player_name(socket.assigns.room, socket.assigns.player_session_id),
+          join_error: nil
+        )
 
       true ->
-        case RoomRegistry.join_room(socket.assigns.code, name) do
+        case RoomRegistry.join_room(socket.assigns.code, socket.assigns.player_session_id, name) do
           {:ok, room} ->
-            assign(socket, room: room, join_error: nil)
+            assign(socket,
+              room: room,
+              player_name: RoomRegistry.player_name(room, socket.assigns.player_session_id),
+              join_error: nil
+            )
 
           {:error, reason} ->
             assign(socket, join_error: reason, player_name: "")
@@ -148,8 +166,8 @@ defmodule TricktakersWebWeb.RoomLive do
                         class="row between"
                         style="padding:10px 12px;border:1px solid var(--hair);border-radius:8px;"
                       >
-                        <span>{player}</span>
-                        <%= if player == @room.host do %>
+                        <span>{player.name}</span>
+                        <%= if player.id == @room.host_id do %>
                           <span class="pill">Host</span>
                         <% end %>
                       </div>
@@ -165,7 +183,7 @@ defmodule TricktakersWebWeb.RoomLive do
                     class="btn"
                     style="margin-top: 16px;"
                     phx-click="start_game"
-                    disabled={@player_name != @room.host or @room.status != :waiting}
+                    disabled={@player_session_id != @room.host_id or @room.status != :waiting}
                   >
                     Start game
                   </button>
@@ -176,7 +194,7 @@ defmodule TricktakersWebWeb.RoomLive do
                   <% end %>
                   <%= if @room.status == :in_progress do %>
                     <.link
-                      navigate={~p"/games/#{@room.code}?name=#{@player_name}"}
+                      navigate={~p"/games/#{@room.code}"}
                       class="btn ghost"
                       style="margin-top: 8px;"
                     >

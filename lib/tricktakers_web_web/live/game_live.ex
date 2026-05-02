@@ -4,29 +4,35 @@ defmodule TricktakersWebWeb.GameLive do
   alias TricktakersWeb.RoomRegistry
 
   @impl true
-  def mount(params, _session, socket) do
+  def mount(params, session, socket) do
     code = String.upcase(params["code"] || "")
     room = RoomRegistry.get_room(code)
+    player_session_id = session["player_session_id"]
     if connected?(socket) and room, do: RoomRegistry.subscribe_room(code)
 
     {:ok,
      socket
      |> assign(:room, room)
-     |> assign(:player_name, String.trim(params["name"] || ""))
+     |> assign(:player_session_id, player_session_id)
+     |> assign(:player_name, (room && RoomRegistry.player_name(room, player_session_id)) || "")
      |> assign(:selection_error, nil)
      |> assign(:setup_error, nil)}
   end
 
   @impl true
   def handle_info({:room_updated, room}, socket) do
-    {:noreply, assign(socket, :room, room)}
+    player_name =
+      RoomRegistry.player_name(room, socket.assigns.player_session_id) ||
+        socket.assigns.player_name
+
+    {:noreply, assign(socket, room: room, player_name: player_name)}
   end
 
   @impl true
   def handle_event("choose_character", %{"character" => character_id}, socket) do
     case RoomRegistry.choose_character(
            socket.assigns.room.code,
-           socket.assigns.player_name,
+           socket.assigns.player_session_id,
            character_id
          ) do
       {:ok, room} ->
@@ -42,7 +48,7 @@ defmodule TricktakersWebWeb.GameLive do
 
     case RoomRegistry.complete_character_setup(
            socket.assigns.room.code,
-           socket.assigns.player_name,
+           socket.assigns.player_session_id,
            setup_params
          ) do
       {:ok, room} ->
@@ -67,7 +73,7 @@ defmodule TricktakersWebWeb.GameLive do
               <.link navigate={~p"/lobby"} class="btn" style="margin-top: 12px;">Back to lobby</.link>
             </div>
           <% else %>
-            <%= if not player_in_room?(@room, @player_name) do %>
+            <%= if not player_in_room?(@room, @player_session_id) do %>
               <div class="page panel">
                 <div class="eyebrow">Game in progress</div>
                 <h1 class="tt-heading-2" style="margin-top: 6px;">This table is already seated.</h1>
@@ -83,17 +89,17 @@ defmodule TricktakersWebWeb.GameLive do
                 <% :character_selection -> %>
                   <.character_selection_phase
                     room={@room}
-                    player_name={@player_name}
+                    player_session_id={@player_session_id}
                     selection_error={@selection_error}
                   />
                 <% :character_setup -> %>
                   <.character_setup_phase
                     room={@room}
-                    player_name={@player_name}
+                    player_session_id={@player_session_id}
                     setup_error={@setup_error}
                   />
                 <% _phase -> %>
-                  <.active_table room={@room} player_name={@player_name} />
+                  <.active_table room={@room} player_session_id={@player_session_id} />
               <% end %>
             <% end %>
           <% end %>
@@ -104,12 +110,12 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   attr :room, :map, required: true
-  attr :player_name, :string, required: true
+  attr :player_session_id, :string, required: true
   attr :selection_error, :string, default: nil
 
   defp character_selection_phase(assigns) do
     assigns =
-      assign(assigns, :setup, character_selection_state(assigns.room, assigns.player_name))
+      assign(assigns, :setup, character_selection_state(assigns.room, assigns.player_session_id))
 
     ~H"""
     <section id="character-selection" class="game-setup page-wide">
@@ -231,11 +237,12 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   attr :room, :map, required: true
-  attr :player_name, :string, required: true
+  attr :player_session_id, :string, required: true
   attr :setup_error, :string, default: nil
 
   defp character_setup_phase(assigns) do
-    assigns = assign(assigns, :setup, character_setup_state(assigns.room, assigns.player_name))
+    assigns =
+      assign(assigns, :setup, character_setup_state(assigns.room, assigns.player_session_id))
 
     ~H"""
     <section id="character-setup" class="game-setup page-wide">
@@ -441,9 +448,7 @@ defmodule TricktakersWebWeb.GameLive do
         <span class="glyph">T</span><span>Tricktakers</span>
       </.link>
       <nav>
-        <.link navigate={
-          if @room, do: ~p"/rooms/#{@room.code}?name=#{@player_name}", else: ~p"/lobby"
-        }>
+        <.link navigate={if @room, do: ~p"/rooms/#{@room.code}", else: ~p"/lobby"}>
           Room
         </.link>
         <.link navigate={~p"/characters"}>Characters</.link>
@@ -459,12 +464,12 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   attr :room, :map, required: true
-  attr :player_name, :string, required: true
+  attr :player_session_id, :string, required: true
 
   defp active_table(assigns) do
     assigns =
       assigns
-      |> assign(:table, table_state(assigns.room, assigns.player_name))
+      |> assign(:table, table_state(assigns.room, assigns.player_session_id))
 
     ~H"""
     <section id="active-game-table" class="game-table-shell">
@@ -486,7 +491,7 @@ defmodule TricktakersWebWeb.GameLive do
           <span class="pill red">Lead color · {@table.lead_color}</span>
           <span class="pill solid">{@table.active_player} leads</span>
           <.link navigate={~p"/characters"} class="btn ghost sm">Rules</.link>
-          <.link navigate={~p"/rooms/#{@room.code}?name=#{@player_name}"} class="btn ghost sm">
+          <.link navigate={~p"/rooms/#{@room.code}"} class="btn ghost sm">
             Room
           </.link>
         </div>
@@ -678,12 +683,9 @@ defmodule TricktakersWebWeb.GameLive do
     """
   end
 
-  defp table_state(room, player_name) do
-    players = seat_players(room.players, player_name, room.game.character_picks || %{})
-
-    you =
-      Enum.find(players, &(String.downcase(&1.name) == String.downcase(player_name || ""))) ||
-        hd(players)
+  defp table_state(room, player_session_id) do
+    players = seat_players(room.players, player_session_id, room.game.character_picks || %{})
+    you = Enum.find(players, &(&1.id == player_session_id)) || hd(players)
 
     opponents = Enum.reject(players, &(&1.name == you.name))
 
@@ -718,49 +720,48 @@ defmodule TricktakersWebWeb.GameLive do
     }
   end
 
-  defp seat_players(players, player_name, character_picks) do
-    names =
-      ([player_name | players] ++ ["akari", "ryan_c", "fumi"])
-      |> Enum.map(&String.trim(to_string(&1 || "")))
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.uniq()
-      |> Enum.take(4)
-
+  defp seat_players(players, _player_session_id, character_picks) do
     roster = fallback_roster()
 
-    names
+    players
     |> Enum.with_index()
-    |> Enum.map(fn {name, index} ->
+    |> Enum.map(fn {player, index} ->
       fallback = Enum.at(roster, index)
-      character = character_by_id(Map.get(character_picks, name)) || fallback
+      character = character_by_id(Map.get(character_picks, player.id)) || fallback
 
       fallback
       |> Map.put(:character, character.name)
       |> Map.put(:priority, character.priority)
-      |> Map.put(:name, name)
-      |> Map.put(:initial, initial(name))
+      |> Map.put(:id, player.id)
+      |> Map.put(:name, player.name)
+      |> Map.put(:initial, initial(player.name))
       |> Map.put(:cards_left, 3)
     end)
   end
 
-  defp character_selection_state(room, player_name) do
+  defp character_selection_state(room, player_session_id) do
     game = room.game
     picks = game.character_picks || %{}
     characters = characters_for_mode(room.mode)
     current_picker = Enum.at(game.character_order, game.current_picker_index)
-    taken_by = Map.new(picks, fn {player, character_id} -> {character_id, player} end)
-    players = seat_players(room.players, player_name, picks)
+
+    taken_by =
+      Map.new(picks, fn {player_id, character_id} ->
+        {character_id, player_name(room, player_id)}
+      end)
+
+    players = seat_players(room.players, player_session_id, picks)
 
     %{
       round: game.round,
       rounds: if(room.max_players == 2, do: 5, else: 3),
-      current_picker: current_picker,
+      current_picker: player_name(room, current_picker),
       current_pick_number: min(map_size(picks) + 1, length(game.character_order)),
       total_picks: length(game.character_order),
       available_count: length(characters),
       characters: characters,
       taken_by: taken_by,
-      your_turn?: current_picker == player_name,
+      your_turn?: current_picker == player_session_id,
       hand_preview: [
         %{kind: :number, suit: :red, value: 9, size: :sm},
         %{kind: :number, suit: :red, value: 4, size: :sm},
@@ -769,37 +770,38 @@ defmodule TricktakersWebWeb.GameLive do
         %{kind: :rare, size: :sm}
       ],
       pickers:
-        Enum.map(game.character_order, fn name ->
-          character = character_by_id(Map.get(picks, name))
-          player = Enum.find(players, &(&1.name == name))
+        Enum.map(game.character_order, fn player_id ->
+          character = character_by_id(Map.get(picks, player_id))
+          player = Enum.find(players, &(&1.id == player_id))
+          name = player_name(room, player_id)
 
           %{
             name: name,
             initial: initial(name),
             avatar_class: player && player.avatar_class,
             character: character,
-            current?: name == current_picker,
-            you?: name == player_name
+            current?: player_id == current_picker,
+            you?: player_id == player_session_id
           }
         end)
     }
   end
 
-  defp character_setup_state(room, player_name) do
+  defp character_setup_state(room, player_session_id) do
     game = room.game
     setup_done = game.character_setup_done || %{}
-    players = seat_players(room.players, player_name, game.character_picks || %{})
+    players = seat_players(room.players, player_session_id, game.character_picks || %{})
     current_player = Enum.at(game.character_setup_order, game.current_setup_index)
     current_character = character_by_id(Map.get(game.character_picks, current_player))
 
     %{
       round: game.round,
       rounds: if(room.max_players == 2, do: 5, else: 3),
-      current_player: current_player,
+      current_player: player_name(room, current_player),
       current_character: current_character,
       current_setup_number: min(map_size(setup_done) + 1, length(game.character_setup_order)),
       total_setups: length(game.character_setup_order),
-      your_turn?: current_player == player_name,
+      your_turn?: current_player == player_session_id,
       hand_preview: [
         %{kind: :number, suit: :red, value: 9, size: :sm},
         %{kind: :number, suit: :red, value: 4, size: :sm},
@@ -808,17 +810,18 @@ defmodule TricktakersWebWeb.GameLive do
         %{kind: :rare, size: :sm}
       ],
       players:
-        Enum.map(game.character_setup_order, fn name ->
-          player = Enum.find(players, &(&1.name == name))
+        Enum.map(game.character_setup_order, fn player_id ->
+          player = Enum.find(players, &(&1.id == player_id))
+          name = player_name(room, player_id)
 
           %{
             name: name,
             initial: initial(name),
             avatar_class: player && player.avatar_class,
-            character: character_by_id(Map.get(game.character_picks, name)),
-            current?: name == current_player,
-            done?: Map.has_key?(setup_done, name),
-            you?: name == player_name
+            character: character_by_id(Map.get(game.character_picks, player_id)),
+            current?: player_id == current_player,
+            done?: Map.has_key?(setup_done, player_id),
+            you?: player_id == player_session_id
           }
         end)
     }
@@ -827,7 +830,11 @@ defmodule TricktakersWebWeb.GameLive do
   defp game_phase(%{game: %{phase: phase}}), do: phase
   defp game_phase(_room), do: :playing
 
-  defp player_in_room?(room, player_name), do: player_name in room.players
+  defp player_in_room?(room, player_session_id),
+    do: RoomRegistry.player_in_room?(room, player_session_id)
+
+  defp player_name(room, player_session_id),
+    do: RoomRegistry.player_name(room, player_session_id) || "Unknown"
 
   defp characters_for_mode("Advanced"), do: character_roster()
   defp characters_for_mode(_mode), do: Enum.filter(character_roster(), &(&1.group == :basic))
