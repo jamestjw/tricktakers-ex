@@ -15,6 +15,7 @@ defmodule TricktakersWebWeb.GameLive do
      |> assign(:room, room)
      |> assign(:player_session_id, player_session_id)
      |> assign(:player_name, (room && RoomRegistry.player_name(room, player_session_id)) || "")
+     |> assign(:selected_character_id, nil)
      |> assign(:selection_error, nil)
      |> assign(:setup_error, nil)}
   end
@@ -29,14 +30,26 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   @impl true
-  def handle_event("choose_character", %{"character" => character_id}, socket) do
+  def handle_event("select_character", %{"character" => character_id}, socket) do
+    {:noreply, assign(socket, selected_character_id: character_id, selection_error: nil)}
+  end
+
+  def handle_event(
+        "confirm_character",
+        _params,
+        %{assigns: %{selected_character_id: nil}} = socket
+      ) do
+    {:noreply, assign(socket, :selection_error, "Choose a character before confirming")}
+  end
+
+  def handle_event("confirm_character", _params, socket) do
     case RoomRegistry.choose_character(
            socket.assigns.room.code,
            socket.assigns.player_session_id,
-           character_id
+           socket.assigns.selected_character_id
          ) do
       {:ok, room} ->
-        {:noreply, assign(socket, room: room, selection_error: nil)}
+        {:noreply, assign(socket, room: room, selected_character_id: nil, selection_error: nil)}
 
       {:error, reason} ->
         {:noreply, assign(socket, :selection_error, reason)}
@@ -90,6 +103,7 @@ defmodule TricktakersWebWeb.GameLive do
                   <.character_selection_phase
                     room={@room}
                     player_session_id={@player_session_id}
+                    selected_character_id={@selected_character_id}
                     selection_error={@selection_error}
                   />
                 <% :character_setup -> %>
@@ -111,11 +125,14 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
+  attr :selected_character_id, :string, default: nil
   attr :selection_error, :string, default: nil
 
   defp character_selection_phase(assigns) do
     assigns =
-      assign(assigns, :setup, character_selection_state(assigns.room, assigns.player_session_id))
+      assigns
+      |> assign(:setup, character_selection_state(assigns.room, assigns.player_session_id))
+      |> assign(:selected_character, character_by_id(assigns.selected_character_id))
 
     ~H"""
     <section id="character-selection" class="game-setup page-wide">
@@ -161,6 +178,7 @@ defmodule TricktakersWebWeb.GameLive do
                 character={character}
                 taken_by={Map.get(@setup.taken_by, character.id)}
                 disabled={not @setup.your_turn?}
+                selected={@selected_character_id == character.id}
               />
             <% end %>
           </div>
@@ -219,11 +237,29 @@ defmodule TricktakersWebWeb.GameLive do
           </div>
 
           <div class="panel-soft">
-            <div class="eyebrow">Status</div>
+            <div class="eyebrow">Selection</div>
             <%= if @setup.your_turn? do %>
-              <p class="body game-setup-note">
-                It is your turn. Pick an available character to lock it in for the round.
-              </p>
+              <%= if @selected_character do %>
+                <div class="game-selected-character">
+                  <div class="tt-heading-3">{@selected_character.name}</div>
+                  <div class="body-sm muted">
+                    {@selected_character.priority} · {@selected_character.tag}
+                  </div>
+                  <p class="body-sm game-setup-note">{@selected_character.ability}</p>
+                  <button
+                    type="button"
+                    id="confirm-character-button"
+                    class="btn lg game-confirm-character"
+                    phx-click="confirm_character"
+                  >
+                    Confirm character
+                  </button>
+                </div>
+              <% else %>
+                <p class="body game-setup-note">
+                  It is your turn. Pick a character to preview it, then confirm when ready.
+                </p>
+              <% end %>
             <% else %>
               <p class="body game-setup-note">
                 Waiting on <strong>{@setup.current_picker}</strong>. You can review the available roster, but choices are locked until your turn.
@@ -406,6 +442,7 @@ defmodule TricktakersWebWeb.GameLive do
   attr :character, :map, required: true
   attr :taken_by, :string, default: nil
   attr :disabled, :boolean, default: false
+  attr :selected, :boolean, default: false
 
   defp character_option(assigns) do
     assigns = assign(assigns, :taken?, not is_nil(assigns.taken_by))
@@ -414,8 +451,8 @@ defmodule TricktakersWebWeb.GameLive do
     <button
       id={"character-#{@character.id}"}
       type="button"
-      class={["char-card", "game-character-option", @taken? && "taken"]}
-      phx-click="choose_character"
+      class={["char-card", "game-character-option", @taken? && "taken", @selected && "selected"]}
+      phx-click="select_character"
       phx-value-character={@character.id}
       disabled={@taken? or @disabled}
       aria-label={character_button_label(@character, @taken_by, @disabled)}

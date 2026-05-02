@@ -292,6 +292,11 @@
   border-color: var(--hair-strong);
 }
 
+.game-character-option.selected {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(24,23,21,0.08), var(--sh-2);
+}
+
 .game-character-option:disabled {
   cursor: not-allowed;
 }
@@ -386,6 +391,16 @@
 .game-setup-note {
   margin-top: var(--s-3);
   color: var(--ink-mute);
+}
+
+.game-selected-character {
+  margin-top: var(--s-3);
+}
+
+.game-confirm-character {
+  width: 100%;
+  margin-top: var(--s-4);
+  justify-content: center;
 }
 
 .game-character-setup-card {
