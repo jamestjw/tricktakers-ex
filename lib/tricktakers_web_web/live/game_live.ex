@@ -13,7 +13,8 @@ defmodule TricktakersWebWeb.GameLive do
      socket
      |> assign(:room, room)
      |> assign(:player_name, String.trim(params["name"] || ""))
-     |> assign(:selection_error, nil)}
+     |> assign(:selection_error, nil)
+     |> assign(:setup_error, nil)}
   end
 
   @impl true
@@ -36,6 +37,22 @@ defmodule TricktakersWebWeb.GameLive do
     end
   end
 
+  def handle_event("complete_character_setup", params, socket) do
+    setup_params = Map.get(params, "character_setup", %{})
+
+    case RoomRegistry.complete_character_setup(
+           socket.assigns.room.code,
+           socket.assigns.player_name,
+           setup_params
+         ) do
+      {:ok, room} ->
+        {:noreply, assign(socket, room: room, setup_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -46,14 +63,14 @@ defmodule TricktakersWebWeb.GameLive do
         <main>
           <%= if is_nil(@room) do %>
             <div class="page panel">
-              <h1 class="h-2">Game not found</h1>
+              <h1 class="tt-heading-2">Game not found</h1>
               <.link navigate={~p"/lobby"} class="btn" style="margin-top: 12px;">Back to lobby</.link>
             </div>
           <% else %>
             <%= if not player_in_room?(@room, @player_name) do %>
               <div class="page panel">
                 <div class="eyebrow">Game in progress</div>
-                <h1 class="h-2" style="margin-top: 6px;">This table is already seated.</h1>
+                <h1 class="tt-heading-2" style="margin-top: 6px;">This table is already seated.</h1>
                 <p class="body-sm" style="margin-top: 8px; max-width: 48ch;">
                   Only players who joined before the game started can open this table.
                 </p>
@@ -62,14 +79,21 @@ defmodule TricktakersWebWeb.GameLive do
                 </.link>
               </div>
             <% else %>
-              <%= if game_phase(@room) == :setup do %>
-                <.setup_phase
-                  room={@room}
-                  player_name={@player_name}
-                  selection_error={@selection_error}
-                />
-              <% else %>
-                <.active_table room={@room} player_name={@player_name} />
+              <%= case game_phase(@room) do %>
+                <% :character_selection -> %>
+                  <.character_selection_phase
+                    room={@room}
+                    player_name={@player_name}
+                    selection_error={@selection_error}
+                  />
+                <% :character_setup -> %>
+                  <.character_setup_phase
+                    room={@room}
+                    player_name={@player_name}
+                    setup_error={@setup_error}
+                  />
+                <% _phase -> %>
+                  <.active_table room={@room} player_name={@player_name} />
               <% end %>
             <% end %>
           <% end %>
@@ -83,15 +107,16 @@ defmodule TricktakersWebWeb.GameLive do
   attr :player_name, :string, required: true
   attr :selection_error, :string, default: nil
 
-  defp setup_phase(assigns) do
-    assigns = assign(assigns, :setup, setup_state(assigns.room, assigns.player_name))
+  defp character_selection_phase(assigns) do
+    assigns =
+      assign(assigns, :setup, character_selection_state(assigns.room, assigns.player_name))
 
     ~H"""
-    <section id="character-setup" class="game-setup page-wide">
+    <section id="character-selection" class="game-setup page-wide">
       <header class="game-setup-header">
         <div>
           <div class="eyebrow">Round {@setup.round} of {@setup.rounds} · Setup phase</div>
-          <h1 class="h-1 game-setup-title">Choose your character.</h1>
+          <h1 class="tt-heading-1 game-setup-title">Choose your character.</h1>
           <p class="body game-setup-copy">
             Each round starts with character selection. {@room.mode} mode exposes {@setup.available_count} characters; players choose one at a time in lead order.
           </p>
@@ -158,7 +183,9 @@ defmodule TricktakersWebWeb.GameLive do
                   <div class="row gap-2">
                     <span class={["avatar", picker.avatar_class]}>{picker.initial}</span>
                     <div>
-                      <div class="h-4">{picker.name}{if picker.you?, do: " (you)", else: ""}</div>
+                      <div class="tt-heading-4">
+                        {picker.name}{if picker.you?, do: " (you)", else: ""}
+                      </div>
                       <div class="body-sm muted">
                         <%= if picker.character do %>
                           Picked {picker.character.name}
@@ -200,6 +227,172 @@ defmodule TricktakersWebWeb.GameLive do
         </aside>
       </div>
     </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :player_name, :string, required: true
+  attr :setup_error, :string, default: nil
+
+  defp character_setup_phase(assigns) do
+    assigns = assign(assigns, :setup, character_setup_state(assigns.room, assigns.player_name))
+
+    ~H"""
+    <section id="character-setup" class="game-setup page-wide">
+      <header class="game-setup-header">
+        <div>
+          <div class="eyebrow">Round {@setup.round} of {@setup.rounds} · Character setup</div>
+          <h1 class="tt-heading-1 game-setup-title">Resolve character setup.</h1>
+          <p class="body game-setup-copy">
+            Characters resolve setup in priority order. Some characters need a choice before trick play can begin.
+          </p>
+        </div>
+        <div class="status-row game-setup-status">
+          <.progress_dots current={@setup.current_setup_number} total={@setup.total_setups} />
+          <div class="sep"></div>
+          <span>
+            <strong class="mono">{@setup.current_player}</strong>
+            <%= if @setup.your_turn? do %>
+              <span>is you</span>
+            <% else %>
+              <span>is setting up</span>
+            <% end %>
+          </span>
+          <div class="sep"></div>
+          <span class="mono muted">{@room.code}</span>
+        </div>
+      </header>
+
+      <div class="game-setup-layout">
+        <section class="panel game-character-setup-card">
+          <div class="eyebrow">Current character</div>
+          <div class="game-character-setup-head">
+            <div>
+              <div class="tt-heading-2">{@setup.current_character.name}</div>
+              <div class="body-sm muted">
+                {@setup.current_character.priority} · {@setup.current_character.tag}
+              </div>
+            </div>
+            <span class="pill solid">{@setup.current_character.points}</span>
+          </div>
+          <p class="body game-setup-copy">{@setup.current_character.ability}</p>
+
+          <%= if @setup.your_turn? do %>
+            <.character_setup_form character={@setup.current_character} hand={@setup.hand_preview} />
+          <% else %>
+            <div class="panel-soft game-waiting-card">
+              <div class="tt-heading-3">Waiting for {@setup.current_player}</div>
+              <p class="body-sm">
+                They are resolving {@setup.current_character.name}. You will continue automatically when setup reaches your character or play begins.
+              </p>
+            </div>
+          <% end %>
+
+          <%= if @setup_error do %>
+            <p class="body-sm game-selection-error">{@setup_error}</p>
+          <% end %>
+        </section>
+
+        <aside class="game-setup-sidebar">
+          <div class="panel">
+            <div class="eyebrow">Setup order</div>
+            <div class="game-picker-list">
+              <%= for player <- @setup.players do %>
+                <div class={["game-picker-row", player.current? && "current", player.you? && "you"]}>
+                  <div class="row gap-2">
+                    <span class={["avatar", player.avatar_class]}>{player.initial}</span>
+                    <div>
+                      <div class="tt-heading-4">
+                        {player.name}{if player.you?, do: " (you)", else: ""}
+                      </div>
+                      <div class="body-sm muted">{player.character.name}</div>
+                    </div>
+                  </div>
+                  <%= cond do %>
+                    <% player.done? -> %>
+                      <span class="pill solid">Done</span>
+                    <% player.current? -> %>
+                      <span class="pill gold">Setting up</span>
+                    <% true -> %>
+                      <span class="pill">Pending</span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <div class="panel-soft">
+            <div class="eyebrow">Next phase</div>
+            <p class="body game-setup-note">
+              Once every selected character is set up, the table opens for Trick 1.
+            </p>
+          </div>
+        </aside>
+      </div>
+    </section>
+    """
+  end
+
+  attr :character, :map, required: true
+  attr :hand, :list, required: true
+
+  defp character_setup_form(assigns) do
+    assigns = assign(assigns, :form, to_form(%{}, as: :character_setup))
+
+    ~H"""
+    <.form
+      for={@form}
+      id={"#{@character.id}-setup-form"}
+      phx-submit="complete_character_setup"
+      class="game-character-setup-form"
+    >
+      <%= case @character.id do %>
+        <% "king" -> %>
+          <div class="field">
+            <label for="king-discard">Discard one card after taking the King's Rare</label>
+            <select id="king-discard" name="character_setup[discard]" class="input" required>
+              <%= for card <- @hand do %>
+                <option value={card_label(card)}>{card_label(card)}</option>
+              <% end %>
+            </select>
+          </div>
+          <p class="body-sm muted">
+            The King's Exclusive Rare is added to your hand. Choose one card to discard before play begins.
+          </p>
+        <% "gambler" -> %>
+          <div class="game-form-grid">
+            <div class="field">
+              <label for="gambler-bid">Bid</label>
+              <select id="gambler-bid" name="character_setup[bid]" class="input" required>
+                <%= for bid <- 0..5 do %>
+                  <option value={bid}>{bid} tricks</option>
+                <% end %>
+              </select>
+            </div>
+            <div class="field">
+              <label for="gambler-wager">Wager</label>
+              <select id="gambler-wager" name="character_setup[wager]" class="input" required>
+                <%= for wager <- [0, 10, 20, 30, 40, 50] do %>
+                  <option value={wager}>{wager} pts</option>
+                <% end %>
+              </select>
+            </div>
+          </div>
+          <p class="body-sm muted">
+            Redraw support will come with hand management. For now, lock your bid and wager.
+          </p>
+        <% _character_id -> %>
+          <input type="hidden" name="character_setup[notes]" value="auto" />
+          <div class="panel-soft game-waiting-card">
+            <div class="tt-heading-3">No choice needed</div>
+            <p class="body-sm">
+              This character's setup can be marked complete for now. More detailed setup controls can be added as the rules engine grows.
+            </p>
+          </div>
+      <% end %>
+
+      <button type="submit" class="btn lg">Complete setup</button>
+    </.form>
     """
   end
 
@@ -550,7 +743,7 @@ defmodule TricktakersWebWeb.GameLive do
     end)
   end
 
-  defp setup_state(room, player_name) do
+  defp character_selection_state(room, player_name) do
     game = room.game
     picks = game.character_picks || %{}
     characters = characters_for_mode(room.mode)
@@ -586,6 +779,45 @@ defmodule TricktakersWebWeb.GameLive do
             avatar_class: player && player.avatar_class,
             character: character,
             current?: name == current_picker,
+            you?: name == player_name
+          }
+        end)
+    }
+  end
+
+  defp character_setup_state(room, player_name) do
+    game = room.game
+    setup_done = game.character_setup_done || %{}
+    players = seat_players(room.players, player_name, game.character_picks || %{})
+    current_player = Enum.at(game.character_setup_order, game.current_setup_index)
+    current_character = character_by_id(Map.get(game.character_picks, current_player))
+
+    %{
+      round: game.round,
+      rounds: if(room.max_players == 2, do: 5, else: 3),
+      current_player: current_player,
+      current_character: current_character,
+      current_setup_number: min(map_size(setup_done) + 1, length(game.character_setup_order)),
+      total_setups: length(game.character_setup_order),
+      your_turn?: current_player == player_name,
+      hand_preview: [
+        %{kind: :number, suit: :red, value: 9, size: :sm},
+        %{kind: :number, suit: :red, value: 4, size: :sm},
+        %{kind: :number, suit: :blue, value: 2, size: :sm},
+        %{kind: :number, suit: :black, value: 1, size: :sm},
+        %{kind: :rare, size: :sm}
+      ],
+      players:
+        Enum.map(game.character_setup_order, fn name ->
+          player = Enum.find(players, &(&1.name == name))
+
+          %{
+            name: name,
+            initial: initial(name),
+            avatar_class: player && player.avatar_class,
+            character: character_by_id(Map.get(game.character_picks, name)),
+            current?: name == current_player,
+            done?: Map.has_key?(setup_done, name),
             you?: name == player_name
           }
         end)

@@ -104,7 +104,7 @@ defmodule TricktakersWebWeb.RoomLive do
         <main class="page">
           <%= if is_nil(@room) do %>
             <div class="panel">
-              <h1 class="h-2">Room not found</h1>
+              <h1 class="tt-heading-2">Room not found</h1>
               <p class="body-sm" style="margin-top: 8px;">The room code may be invalid or expired.</p>
               <.link navigate={~p"/lobby"} class="btn" style="margin-top: 12px;">Back to lobby</.link>
             </div>
@@ -112,14 +112,14 @@ defmodule TricktakersWebWeb.RoomLive do
             <div class="row between" style="align-items:flex-end;margin-bottom: 24px;">
               <div>
                 <div class="eyebrow">Room code · {@room.code}</div>
-                <h1 class="h-1" style="margin-top:6px;">{@room.name}</h1>
+                <h1 class="tt-heading-1" style="margin-top:6px;">{@room.name}</h1>
               </div>
               <span class="pill solid">{String.capitalize(to_string(@room.status))}</span>
             </div>
 
             <%= if @player_name == "" do %>
               <div class="panel" style="max-width: 420px;">
-                <div class="h-3">Join room</div>
+                <div class="tt-heading-3">Join room</div>
                 <.form
                   for={@join_form}
                   id="room-join-form"
@@ -139,7 +139,9 @@ defmodule TricktakersWebWeb.RoomLive do
             <% else %>
               <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;">
                 <section class="panel">
-                  <div class="h-3">Players ({length(@room.players)} / {@room.max_players})</div>
+                  <div class="tt-heading-3">
+                    Players ({length(@room.players)} / {@room.max_players})
+                  </div>
                   <div class="col gap-2" style="margin-top: 12px;">
                     <%= for player <- @room.players do %>
                       <div

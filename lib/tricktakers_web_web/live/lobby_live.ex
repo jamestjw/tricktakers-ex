@@ -85,7 +85,7 @@ defmodule TricktakersWebWeb.LobbyLive do
             <div style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 64px; align-items: center;">
               <div>
                 <div class="eyebrow">A trick-taking card game by Hiroken · 2-5 players</div>
-                <h1 class="h-display" style="margin: 16px 0 24px; max-width: 12ch;">
+                <h1 class="tt-display" style="margin: 16px 0 24px; max-width: 12ch;">
                   Eight characters.<br />One crown.
                 </h1>
                 <p class="body" style="max-width: 56ch; color: var(--ink-2);">
@@ -97,7 +97,7 @@ defmodule TricktakersWebWeb.LobbyLive do
                 </div>
               </div>
               <div class="panel-soft">
-                <div class="h-3">How it works</div>
+                <div class="tt-heading-3">How it works</div>
                 <div class="body muted" style="margin-top:8px;">
                   Create a room, share the code, and start when everyone is seated.
                 </div>
@@ -109,7 +109,7 @@ defmodule TricktakersWebWeb.LobbyLive do
             <div class="row between" style="margin-bottom: 24px; align-items: flex-end;">
               <div>
                 <div class="eyebrow">Lobby</div>
-                <h1 class="h-2" style="margin-top: 6px;">Find a table.</h1>
+                <h1 class="tt-heading-2" style="margin-top: 6px;">Find a table.</h1>
               </div>
             </div>
 
@@ -117,7 +117,7 @@ defmodule TricktakersWebWeb.LobbyLive do
               <section class="col gap-3">
                 <%= if @rooms == [] do %>
                   <div class="panel">
-                    <div class="h-3">No active rooms yet</div>
+                    <div class="tt-heading-3">No active rooms yet</div>
                     <p class="body-sm" style="margin-top: 8px;">Create one from the right panel.</p>
                   </div>
                 <% else %>
@@ -147,7 +147,7 @@ defmodule TricktakersWebWeb.LobbyLive do
 
               <aside class="col gap-3">
                 <div class="panel">
-                  <div class="h-3">Create room</div>
+                  <div class="tt-heading-3">Create room</div>
                   <.form
                     for={@create_form}
                     id="create-room-form"
@@ -236,7 +236,7 @@ defmodule TricktakersWebWeb.LobbyLive do
                 </div>
 
                 <div class="panel">
-                  <div class="h-3">Join by code</div>
+                  <div class="tt-heading-3">Join by code</div>
                   <.form
                     for={@join_form}
                     id="join-room-form"
