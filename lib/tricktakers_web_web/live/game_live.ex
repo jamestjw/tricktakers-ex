@@ -9,12 +9,31 @@ defmodule TricktakersWebWeb.GameLive do
     room = RoomRegistry.get_room(code)
     if connected?(socket) and room, do: RoomRegistry.subscribe_room(code)
 
-    {:ok, assign(socket, room: room, player_name: String.trim(params["name"] || ""))}
+    {:ok,
+     socket
+     |> assign(:room, room)
+     |> assign(:player_name, String.trim(params["name"] || ""))
+     |> assign(:selection_error, nil)}
   end
 
   @impl true
   def handle_info({:room_updated, room}, socket) do
     {:noreply, assign(socket, :room, room)}
+  end
+
+  @impl true
+  def handle_event("choose_character", %{"character" => character_id}, socket) do
+    case RoomRegistry.choose_character(
+           socket.assigns.room.code,
+           socket.assigns.player_name,
+           character_id
+         ) do
+      {:ok, room} ->
+        {:noreply, assign(socket, room: room, selection_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :selection_error, reason)}
+    end
   end
 
   @impl true
@@ -31,11 +50,191 @@ defmodule TricktakersWebWeb.GameLive do
               <.link navigate={~p"/lobby"} class="btn" style="margin-top: 12px;">Back to lobby</.link>
             </div>
           <% else %>
-            <.active_table room={@room} player_name={@player_name} />
+            <%= if not player_in_room?(@room, @player_name) do %>
+              <div class="page panel">
+                <div class="eyebrow">Game in progress</div>
+                <h1 class="h-2" style="margin-top: 6px;">This table is already seated.</h1>
+                <p class="body-sm" style="margin-top: 8px; max-width: 48ch;">
+                  Only players who joined before the game started can open this table.
+                </p>
+                <.link navigate={~p"/lobby"} class="btn" style="margin-top: 12px;">
+                  Back to lobby
+                </.link>
+              </div>
+            <% else %>
+              <%= if game_phase(@room) == :setup do %>
+                <.setup_phase
+                  room={@room}
+                  player_name={@player_name}
+                  selection_error={@selection_error}
+                />
+              <% else %>
+                <.active_table room={@room} player_name={@player_name} />
+              <% end %>
+            <% end %>
           <% end %>
         </main>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :player_name, :string, required: true
+  attr :selection_error, :string, default: nil
+
+  defp setup_phase(assigns) do
+    assigns = assign(assigns, :setup, setup_state(assigns.room, assigns.player_name))
+
+    ~H"""
+    <section id="character-setup" class="game-setup page-wide">
+      <header class="game-setup-header">
+        <div>
+          <div class="eyebrow">Round {@setup.round} of {@setup.rounds} · Setup phase</div>
+          <h1 class="h-1 game-setup-title">Choose your character.</h1>
+          <p class="body game-setup-copy">
+            Each round starts with character selection. {@room.mode} mode exposes {@setup.available_count} characters; players choose one at a time in lead order.
+          </p>
+        </div>
+        <div class="status-row game-setup-status">
+          <.progress_dots current={@setup.current_pick_number} total={@setup.total_picks} />
+          <div class="sep"></div>
+          <span>
+            <strong class="mono">{@setup.current_picker}</strong>
+            <%= if @setup.your_turn? do %>
+              <span>is you</span>
+            <% else %>
+              <span>is choosing</span>
+            <% end %>
+          </span>
+          <div class="sep"></div>
+          <span class="mono muted">{@room.code}</span>
+        </div>
+      </header>
+
+      <div class="game-setup-layout">
+        <div>
+          <div class="row gap-3 game-setup-filters">
+            <span class="pill solid">{@room.mode} ({@setup.available_count})</span>
+            <%= if @room.mode == "Advanced" do %>
+              <span class="pill">Basic 5</span>
+              <span class="pill">Advanced 3</span>
+            <% else %>
+              <span class="pill">Core roster</span>
+            <% end %>
+          </div>
+
+          <div id="character-grid" class="game-character-grid">
+            <%= for character <- @setup.characters do %>
+              <.character_option
+                character={character}
+                taken_by={Map.get(@setup.taken_by, character.id)}
+                disabled={not @setup.your_turn?}
+              />
+            <% end %>
+          </div>
+
+          <div class="game-hand-preview">
+            <div class="eyebrow">Your hand for this round</div>
+            <div class="panel-soft game-hand-preview-panel">
+              <div class="row gap-3 center-x">
+                <%= for card <- @setup.hand_preview do %>
+                  <.playing_card card={card} />
+                <% end %>
+              </div>
+              <p class="body-sm game-hand-preview-copy">
+                Strong on Black 1 and Red. Character choice should match both your hand and table position.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="game-setup-sidebar">
+          <div class="panel">
+            <div class="eyebrow">Selection order</div>
+            <div class="game-picker-list">
+              <%= for picker <- @setup.pickers do %>
+                <div class={["game-picker-row", picker.current? && "current", picker.you? && "you"]}>
+                  <div class="row gap-2">
+                    <span class={["avatar", picker.avatar_class]}>{picker.initial}</span>
+                    <div>
+                      <div class="h-4">{picker.name}{if picker.you?, do: " (you)", else: ""}</div>
+                      <div class="body-sm muted">
+                        <%= if picker.character do %>
+                          Picked {picker.character.name}
+                        <% else %>
+                          Waiting to choose
+                        <% end %>
+                      </div>
+                    </div>
+                  </div>
+                  <%= cond do %>
+                    <% picker.character -> %>
+                      <span class="pill solid">{picker.character.priority}</span>
+                    <% picker.current? -> %>
+                      <span class="pill gold">Choosing</span>
+                    <% true -> %>
+                      <span class="pill">Pending</span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+
+            <%= if @selection_error do %>
+              <p class="body-sm game-selection-error">{@selection_error}</p>
+            <% end %>
+          </div>
+
+          <div class="panel-soft">
+            <div class="eyebrow">Status</div>
+            <%= if @setup.your_turn? do %>
+              <p class="body game-setup-note">
+                It is your turn. Pick an available character to lock it in for the round.
+              </p>
+            <% else %>
+              <p class="body game-setup-note">
+                Waiting on <strong>{@setup.current_picker}</strong>. You can review the available roster, but choices are locked until your turn.
+              </p>
+            <% end %>
+          </div>
+        </aside>
+      </div>
+    </section>
+    """
+  end
+
+  attr :character, :map, required: true
+  attr :taken_by, :string, default: nil
+  attr :disabled, :boolean, default: false
+
+  defp character_option(assigns) do
+    assigns = assign(assigns, :taken?, not is_nil(assigns.taken_by))
+
+    ~H"""
+    <button
+      id={"character-#{@character.id}"}
+      type="button"
+      class={["char-card", "game-character-option", @taken? && "taken"]}
+      phx-click="choose_character"
+      phx-value-character={@character.id}
+      disabled={@taken? or @disabled}
+      aria-label={character_button_label(@character, @taken_by, @disabled)}
+    >
+      <div class="head">
+        <div>
+          <div class="priority">{@character.priority} · {@character.tag}</div>
+          <div class="name">{@character.name}</div>
+        </div>
+        <span class="pill">{@character.points}</span>
+      </div>
+      <div class="body-area">
+        <div class="ability">{@character.ability}</div>
+        <div class="win-cond"><strong>Win:</strong> {@character.win}</div>
+        <%= if @taken? do %>
+          <div class="game-character-taken">Chosen by {@taken_by}</div>
+        <% end %>
+      </div>
+    </button>
     """
   end
 
@@ -287,7 +486,7 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   defp table_state(room, player_name) do
-    players = seat_players(room.players, player_name)
+    players = seat_players(room.players, player_name, room.game.character_picks || %{})
 
     you =
       Enum.find(players, &(String.downcase(&1.name) == String.downcase(player_name || ""))) ||
@@ -326,7 +525,7 @@ defmodule TricktakersWebWeb.GameLive do
     }
   end
 
-  defp seat_players(players, player_name) do
+  defp seat_players(players, player_name, character_picks) do
     names =
       ([player_name | players] ++ ["akari", "ryan_c", "fumi"])
       |> Enum.map(&String.trim(to_string(&1 || "")))
@@ -334,24 +533,179 @@ defmodule TricktakersWebWeb.GameLive do
       |> Enum.uniq()
       |> Enum.take(4)
 
-    roster = [
-      %{character: "King", priority: "1A", points: 120, tricks: 1, avatar_class: "a4"},
-      %{character: "Hermit", priority: "4A", points: 90, tricks: 2, avatar_class: "a1"},
-      %{character: "Berserker", priority: "5A", points: 60, tricks: 1, avatar_class: "a2"},
-      %{character: "Gambler", priority: "2A", points: 30, tricks: 0, avatar_class: "a3"}
-    ]
+    roster = fallback_roster()
 
     names
     |> Enum.with_index()
     |> Enum.map(fn {name, index} ->
-      roster_entry = Enum.at(roster, index)
+      fallback = Enum.at(roster, index)
+      character = character_by_id(Map.get(character_picks, name)) || fallback
 
-      roster_entry
+      fallback
+      |> Map.put(:character, character.name)
+      |> Map.put(:priority, character.priority)
       |> Map.put(:name, name)
       |> Map.put(:initial, initial(name))
       |> Map.put(:cards_left, 3)
     end)
   end
+
+  defp setup_state(room, player_name) do
+    game = room.game
+    picks = game.character_picks || %{}
+    characters = characters_for_mode(room.mode)
+    current_picker = Enum.at(game.character_order, game.current_picker_index)
+    taken_by = Map.new(picks, fn {player, character_id} -> {character_id, player} end)
+    players = seat_players(room.players, player_name, picks)
+
+    %{
+      round: game.round,
+      rounds: if(room.max_players == 2, do: 5, else: 3),
+      current_picker: current_picker,
+      current_pick_number: min(map_size(picks) + 1, length(game.character_order)),
+      total_picks: length(game.character_order),
+      available_count: length(characters),
+      characters: characters,
+      taken_by: taken_by,
+      your_turn?: current_picker == player_name,
+      hand_preview: [
+        %{kind: :number, suit: :red, value: 9, size: :sm},
+        %{kind: :number, suit: :red, value: 4, size: :sm},
+        %{kind: :number, suit: :blue, value: 2, size: :sm},
+        %{kind: :number, suit: :black, value: 1, size: :sm},
+        %{kind: :rare, size: :sm}
+      ],
+      pickers:
+        Enum.map(game.character_order, fn name ->
+          character = character_by_id(Map.get(picks, name))
+          player = Enum.find(players, &(&1.name == name))
+
+          %{
+            name: name,
+            initial: initial(name),
+            avatar_class: player && player.avatar_class,
+            character: character,
+            current?: name == current_picker,
+            you?: name == player_name
+          }
+        end)
+    }
+  end
+
+  defp game_phase(%{game: %{phase: phase}}), do: phase
+  defp game_phase(_room), do: :playing
+
+  defp player_in_room?(room, player_name), do: player_name in room.players
+
+  defp characters_for_mode("Advanced"), do: character_roster()
+  defp characters_for_mode(_mode), do: Enum.filter(character_roster(), &(&1.group == :basic))
+
+  defp character_by_id(nil), do: nil
+  defp character_by_id(id), do: Enum.find(character_roster(), &(&1.id == id))
+
+  defp character_roster do
+    [
+      %{
+        id: "king",
+        name: "King",
+        priority: "1A",
+        tag: "Trick winner",
+        group: :basic,
+        ability: "Adds the King's Exclusive Rare, then discards one card to balance the hand.",
+        win: "Win all 5 tricks",
+        points: "Tricks"
+      },
+      %{
+        id: "gambler",
+        name: "Gambler",
+        priority: "2A",
+        tag: "Bid + bet",
+        group: :basic,
+        ability:
+          "Declares a trick bid, can redraw up to twice, and wagers points on hitting the bid.",
+        win: "Hit bid or win all 5 tricks",
+        points: "Bid"
+      },
+      %{
+        id: "resistance",
+        name: "Resistance",
+        priority: "3A",
+        tag: "Revolt",
+        group: :basic,
+        ability:
+          "May trigger one Revolt Trick where lowest strength wins and normal advantages invert.",
+        win: "Win Revolt with Black",
+        points: "Revolt"
+      },
+      %{
+        id: "hermit",
+        name: "Hermit",
+        priority: "4A",
+        tag: "Dexterous hand",
+        group: :basic,
+        ability: "Draws and discards before playing; White Flag can beat Rare outside Revolt.",
+        win: "Win all 5 tricks",
+        points: "Rare beats"
+      },
+      %{
+        id: "berserker",
+        name: "Berserker",
+        priority: "5A",
+        tag: "Fierce uplift",
+        group: :basic,
+        ability:
+          "Swaps into the Berserker deck; Berserker beats Rare, but any 1 beats Berserker.",
+        win: "Win 0 tricks",
+        points: "Crowns"
+      },
+      %{
+        id: "adventurer",
+        name: "Adventurer",
+        priority: "3B",
+        tag: "Items",
+        group: :advanced,
+        ability: "Equips items and turns won tricks into new equipment slots.",
+        win: "Score through item timing",
+        points: "Items"
+      },
+      %{
+        id: "collector",
+        name: "Collector",
+        priority: "4B",
+        tag: "Set collection",
+        group: :advanced,
+        ability: "Reserves cards from tricks and scores poker-style combinations at round end.",
+        win: "Build the best sets",
+        points: "Sets"
+      },
+      %{
+        id: "ruler",
+        name: "Ruler",
+        priority: "5B",
+        tag: "Tasks",
+        group: :advanced,
+        ability: "Gives task cards to opponents and scores from completed table objectives.",
+        win: "Everyone completes tasks",
+        points: "Tasks"
+      }
+    ]
+  end
+
+  defp fallback_roster do
+    [
+      %{name: "King", priority: "1A", points: 120, tricks: 1, avatar_class: "a4"},
+      %{name: "Hermit", priority: "4A", points: 90, tricks: 2, avatar_class: "a1"},
+      %{name: "Berserker", priority: "5A", points: 60, tricks: 1, avatar_class: "a2"},
+      %{name: "Gambler", priority: "2A", points: 30, tricks: 0, avatar_class: "a3"},
+      %{name: "Resistance", priority: "3A", points: 30, tricks: 0, avatar_class: "a5"}
+    ]
+  end
+
+  defp character_button_label(character, nil, true), do: "#{character.name}; wait for your turn"
+  defp character_button_label(character, nil, false), do: "Choose #{character.name}"
+
+  defp character_button_label(character, taken_by, _disabled),
+    do: "#{character.name}; chosen by #{taken_by}"
 
   defp card_class(card) do
     [

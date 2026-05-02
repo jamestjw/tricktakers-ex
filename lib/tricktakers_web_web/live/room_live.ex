@@ -71,13 +71,21 @@ defmodule TricktakersWebWeb.RoomLive do
   defp maybe_join_room(socket) do
     name = socket.assigns.player_name
 
-    if name == "" do
-      socket
-    else
-      case RoomRegistry.join_room(socket.assigns.code, name) do
-        {:ok, room} -> assign(socket, room: room, join_error: nil)
-        {:error, reason} -> assign(socket, join_error: reason)
-      end
+    cond do
+      name == "" ->
+        socket
+
+      name in socket.assigns.room.players ->
+        assign(socket, join_error: nil)
+
+      true ->
+        case RoomRegistry.join_room(socket.assigns.code, name) do
+          {:ok, room} ->
+            assign(socket, room: room, join_error: nil)
+
+          {:error, reason} ->
+            assign(socket, join_error: reason, player_name: "")
+        end
     end
   end
 
