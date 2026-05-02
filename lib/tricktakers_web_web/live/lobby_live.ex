@@ -58,7 +58,7 @@ defmodule TricktakersWebWeb.LobbyLive do
         {:noreply,
          socket
          |> assign(:join_error, nil)
-         |> push_navigate(to: ~p"/rooms/#{code}")}
+         |> push_navigate(to: joined_room_path(room))}
 
       name == "" ->
         {:noreply, assign(socket, :join_error, "Player name is required")}
@@ -79,6 +79,9 @@ defmodule TricktakersWebWeb.LobbyLive do
   defp assign_join_form(socket) do
     assign(socket, :join_form, to_form(%{"player_name" => "", "code" => ""}, as: :join))
   end
+
+  defp joined_room_path(%{status: :in_progress, code: code}), do: ~p"/games/#{code}"
+  defp joined_room_path(%{code: code}), do: ~p"/rooms/#{code}"
 
   defp sort_rooms(rooms), do: Enum.sort_by(rooms, & &1.inserted_at, {:desc, DateTime})
 

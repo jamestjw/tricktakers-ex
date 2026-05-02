@@ -120,6 +120,7 @@ defmodule TricktakersWeb.RoomRegistry do
       new_state = put_in(state, [:rooms, updated_room.code], updated_room)
       broadcast_rooms(new_state)
       broadcast_room(updated_room)
+      broadcast_game_started(updated_room)
       {:reply, {:ok, updated_room}, new_state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -426,6 +427,10 @@ defmodule TricktakersWeb.RoomRegistry do
 
   defp broadcast_room(room) do
     Phoenix.PubSub.broadcast(TricktakersWeb.PubSub, room_topic(room.code), {:room_updated, room})
+  end
+
+  defp broadcast_game_started(room) do
+    Phoenix.PubSub.broadcast(TricktakersWeb.PubSub, room_topic(room.code), {:game_started, room})
   end
 
   defp room_topic(code), do: "room:" <> String.upcase(code)

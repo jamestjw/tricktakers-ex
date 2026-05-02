@@ -36,7 +36,7 @@ defmodule TricktakersWebWeb.RoomLive do
     socket = assign(socket, :player_name, player_name)
 
     socket = maybe_join_room(socket)
-    {:noreply, socket}
+    {:noreply, maybe_redirect_to_game(socket)}
   end
 
   @impl true
@@ -46,6 +46,20 @@ defmodule TricktakersWebWeb.RoomLive do
         socket.assigns.player_name
 
     {:noreply, assign(socket, room: room, player_name: player_name)}
+  end
+
+  def handle_info({:game_started, room}, socket) do
+    player_name =
+      RoomRegistry.player_name(room, socket.assigns.player_session_id) ||
+        socket.assigns.player_name
+
+    socket = assign(socket, room: room, player_name: player_name)
+
+    if RoomRegistry.player_in_room?(room, socket.assigns.player_session_id) do
+      {:noreply, push_navigate(socket, to: ~p"/games/#{room.code}")}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -104,6 +118,17 @@ defmodule TricktakersWebWeb.RoomLive do
           {:error, reason} ->
             assign(socket, join_error: reason, player_name: "")
         end
+    end
+  end
+
+  defp maybe_redirect_to_game(%{assigns: %{room: nil}} = socket), do: socket
+
+  defp maybe_redirect_to_game(socket) do
+    if socket.assigns.room.status == :in_progress and
+         RoomRegistry.player_in_room?(socket.assigns.room, socket.assigns.player_session_id) do
+      push_navigate(socket, to: ~p"/games/#{socket.assigns.room.code}")
+    else
+      socket
     end
   end
 
