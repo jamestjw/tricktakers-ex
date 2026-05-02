@@ -306,10 +306,10 @@ defmodule TricktakersWebWeb.GameLive do
           <.progress_dots current={@setup.current_setup_number} total={@setup.total_setups} />
           <div class="sep"></div>
           <span>
-            <strong class="mono">{@setup.current_player}</strong>
             <%= if @setup.your_turn? do %>
-              <span>is you</span>
+              <span>Your turn to setup</span>
             <% else %>
+              <strong class="mono">{@setup.current_player}</strong>
               <span>is setting up</span>
             <% end %>
           </span>
