@@ -395,7 +395,7 @@ defmodule TricktakersWebWeb.GameLive do
             <label for="king-discard">Discard one card after taking the King's Rare</label>
             <select id="king-discard" name="character_setup[discard]" class="input" required>
               <%= for card <- @hand do %>
-                <option value={card_label(card)}>{card_label(card)}</option>
+                <option value={card.id}>{card_label(card)}</option>
               <% end %>
             </select>
           </div>
@@ -708,12 +708,12 @@ defmodule TricktakersWebWeb.GameLive do
         </div>
       <% _ -> %>
         <div class="corner">
-          <div class="num">{@card.value}</div>
+          <div class="num">{@card.rank}</div>
           <div class="pip"></div>
         </div>
-        <div class="center">{@card.value}</div>
+        <div class="center">{@card.rank}</div>
         <div class="corner tr">
-          <div class="num">{@card.value}</div>
+          <div class="num">{@card.rank}</div>
           <div class="pip"></div>
         </div>
     <% end %>
@@ -738,22 +738,16 @@ defmodule TricktakersWebWeb.GameLive do
       current_trick: [
         %{
           player: List.first(opponents, you).name,
-          card: %{kind: :number, suit: :red, value: 5},
+          card: %{id: "preview-red-5", kind: :number, suit: :red, rank: 5},
           style: "transform: translate(-130px, -10px) rotate(-6deg);"
         },
         %{
           player: (Enum.at(opponents, 2) || you).name,
-          card: %{kind: :number, suit: :red, value: 2},
+          card: %{id: "preview-red-2", kind: :number, suit: :red, rank: 2},
           style: "transform: translate(0, -30px) rotate(4deg);"
         }
       ],
-      hand: [
-        %{kind: :number, suit: :red, value: 9},
-        %{kind: :number, suit: :red, value: 4},
-        %{kind: :number, suit: :blue, value: 2, disabled: true},
-        %{kind: :number, suit: :black, value: 1, disabled: true},
-        %{kind: :rare}
-      ]
+      hand: hand_for(room, player_session_id)
     }
   end
 
@@ -799,13 +793,7 @@ defmodule TricktakersWebWeb.GameLive do
       characters: characters,
       taken_by: taken_by,
       your_turn?: current_picker == player_session_id,
-      hand_preview: [
-        %{kind: :number, suit: :red, value: 9, size: :sm},
-        %{kind: :number, suit: :red, value: 4, size: :sm},
-        %{kind: :number, suit: :blue, value: 2, size: :sm},
-        %{kind: :number, suit: :black, value: 1, size: :sm},
-        %{kind: :rare, size: :sm}
-      ],
+      hand_preview: hand_for(room, player_session_id, :sm),
       pickers:
         Enum.map(game.character_order, fn player_id ->
           character = character_by_id(Map.get(picks, player_id))
@@ -839,13 +827,7 @@ defmodule TricktakersWebWeb.GameLive do
       current_setup_number: min(map_size(setup_done) + 1, length(game.character_setup_order)),
       total_setups: length(game.character_setup_order),
       your_turn?: current_player == player_session_id,
-      hand_preview: [
-        %{kind: :number, suit: :red, value: 9, size: :sm},
-        %{kind: :number, suit: :red, value: 4, size: :sm},
-        %{kind: :number, suit: :blue, value: 2, size: :sm},
-        %{kind: :number, suit: :black, value: 1, size: :sm},
-        %{kind: :rare, size: :sm}
-      ],
+      hand_preview: hand_for(room, player_session_id, :sm),
       players:
         Enum.map(game.character_setup_order, fn player_id ->
           player = Enum.find(players, &(&1.id == player_id))
@@ -872,6 +854,18 @@ defmodule TricktakersWebWeb.GameLive do
 
   defp player_name(room, player_session_id),
     do: RoomRegistry.player_name(room, player_session_id) || "Unknown"
+
+  defp hand_for(room, player_session_id, size \\ nil) do
+    room
+    |> get_in([:game, :hands, player_session_id])
+    |> case do
+      nil -> []
+      hand -> Enum.map(hand, &maybe_put_size(&1, size))
+    end
+  end
+
+  defp maybe_put_size(card, nil), do: card
+  defp maybe_put_size(card, size), do: Map.put(card, :size, size)
 
   defp characters_for_mode("Advanced"), do: character_roster()
   defp characters_for_mode(_mode), do: Enum.filter(character_roster(), &(&1.group == :basic))
@@ -1015,8 +1009,8 @@ defmodule TricktakersWebWeb.GameLive do
   defp card_label(%{kind: :white_flag}), do: "White Flag card"
   defp card_label(%{kind: :back}), do: "Face-down card"
 
-  defp card_label(%{suit: suit, value: value}),
-    do: "#{String.capitalize(to_string(suit))} #{value}"
+  defp card_label(%{suit: suit, rank: rank}),
+    do: "#{String.capitalize(to_string(suit))} #{rank}"
 
   defp initial(name) do
     name

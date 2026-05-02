@@ -1,6 +1,8 @@
 defmodule TricktakersWeb.RoomRegistry do
   use GenServer
 
+  alias TricktakersWeb.Game.Deck
+
   @topic "rooms"
 
   def start_link(_opts) do
@@ -120,7 +122,6 @@ defmodule TricktakersWeb.RoomRegistry do
       new_state = put_in(state, [:rooms, updated_room.code], updated_room)
       broadcast_rooms(new_state)
       broadcast_room(updated_room)
-      broadcast_game_started(updated_room)
       {:reply, {:ok, updated_room}, new_state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -135,6 +136,7 @@ defmodule TricktakersWeb.RoomRegistry do
          :ok <- ensure_host(found_room, valid_session_id),
          :ok <- ensure_minimum_players(found_room) do
       player_ids = Enum.map(found_room.players, & &1.id)
+      hands = Deck.deal(player_ids)
 
       game = %{
         started_at: DateTime.utc_now(),
@@ -143,6 +145,7 @@ defmodule TricktakersWeb.RoomRegistry do
         trick: 1,
         lead: hd(player_ids),
         character_order: player_ids,
+        hands: hands,
         character_picks: %{},
         current_picker_index: 0,
         character_setup_order: [],
@@ -159,6 +162,7 @@ defmodule TricktakersWeb.RoomRegistry do
       new_state = put_in(state, [:rooms, updated_room.code], updated_room)
       broadcast_rooms(new_state)
       broadcast_room(updated_room)
+      broadcast_game_started(updated_room)
       {:reply, {:ok, updated_room}, new_state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
