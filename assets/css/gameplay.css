@@ -429,6 +429,68 @@
   gap: var(--s-4);
 }
 
+.game-setup-hand-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.game-setup-hand-field .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.game-setup-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.game-setup-card-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.game-setup-card-button:not(:disabled):hover {
+  transform: translateY(-4px);
+  border-color: var(--hair-strong);
+  box-shadow: var(--sh-card);
+}
+
+.game-setup-card-button.selected {
+  transform: translateY(-6px);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(24,23,21,0.08), var(--sh-card);
+}
+
+.game-setup-card-button.read-only {
+  cursor: default;
+}
+
+.game-setup-card-button:disabled {
+  opacity: 1;
+}
+
+.game-setup-card-button .pcard {
+  pointer-events: none;
+}
+
+.game-setup-hand-hint {
+  margin-top: calc(var(--s-2) * -1);
+}
+
 .game-waiting-card {
   margin-top: var(--s-5);
 }
@@ -563,6 +625,10 @@
   .game-character-setup-head,
   .game-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .game-setup-hand {
+    justify-content: center;
   }
 
   .game-character-setup-head {

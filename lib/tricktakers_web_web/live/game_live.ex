@@ -16,6 +16,7 @@ defmodule TricktakersWebWeb.GameLive do
      |> assign(:player_session_id, player_session_id)
      |> assign(:player_name, (room && RoomRegistry.player_name(room, player_session_id)) || "")
      |> assign(:selected_character_id, nil)
+     |> assign(:selected_setup_card_id, nil)
      |> assign(:selection_error, nil)
      |> assign(:setup_error, nil)}
   end
@@ -56,19 +57,28 @@ defmodule TricktakersWebWeb.GameLive do
     end
   end
 
+  def handle_event("select_setup_card", %{"card" => card_id}, socket) do
+    {:noreply, assign(socket, selected_setup_card_id: card_id, setup_error: nil)}
+  end
+
   def handle_event("complete_character_setup", params, socket) do
     setup_params = Map.get(params, "character_setup", %{})
 
-    case RoomRegistry.complete_character_setup(
-           socket.assigns.room.code,
-           socket.assigns.player_session_id,
-           setup_params
-         ) do
-      {:ok, room} ->
-        {:noreply, assign(socket, room: room, setup_error: nil)}
+    if current_setup_character_id(socket.assigns.room) == "king" and
+         String.trim(setup_params["discard"] || "") == "" do
+      {:noreply, assign(socket, :setup_error, "Choose one card to discard")}
+    else
+      case RoomRegistry.complete_character_setup(
+             socket.assigns.room.code,
+             socket.assigns.player_session_id,
+             setup_params
+           ) do
+        {:ok, room} ->
+          {:noreply, assign(socket, room: room, selected_setup_card_id: nil, setup_error: nil)}
 
-      {:error, reason} ->
-        {:noreply, assign(socket, :setup_error, reason)}
+        {:error, reason} ->
+          {:noreply, assign(socket, :setup_error, reason)}
+      end
     end
   end
 
@@ -77,7 +87,7 @@ defmodule TricktakersWebWeb.GameLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <div class="app game-app">
-        <.game_bar room={@room} player_name={@player_name} />
+        <.game_bar room={@room} />
 
         <main>
           <%= if is_nil(@room) do %>
@@ -110,6 +120,7 @@ defmodule TricktakersWebWeb.GameLive do
                   <.character_setup_phase
                     room={@room}
                     player_session_id={@player_session_id}
+                    selected_setup_card_id={@selected_setup_card_id}
                     setup_error={@setup_error}
                   />
                 <% _phase -> %>
@@ -274,6 +285,7 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
+  attr :selected_setup_card_id, :string, default: nil
   attr :setup_error, :string, default: nil
 
   defp character_setup_phase(assigns) do
@@ -321,7 +333,11 @@ defmodule TricktakersWebWeb.GameLive do
           <p class="body game-setup-copy">{@setup.current_character.ability}</p>
 
           <%= if @setup.your_turn? do %>
-            <.character_setup_form character={@setup.current_character} hand={@setup.hand_preview} />
+            <.character_setup_form
+              character={@setup.current_character}
+              hand={@setup.hand_preview}
+              selected_setup_card_id={@selected_setup_card_id}
+            />
           <% else %>
             <div class="panel-soft game-waiting-card">
               <div class="tt-heading-3">Waiting for {@setup.current_player}</div>
@@ -378,6 +394,7 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :character, :map, required: true
   attr :hand, :list, required: true
+  attr :selected_setup_card_id, :string, default: nil
 
   defp character_setup_form(assigns) do
     assigns = assign(assigns, :form, to_form(%{}, as: :character_setup))
@@ -391,18 +408,22 @@ defmodule TricktakersWebWeb.GameLive do
     >
       <%= case @character.id do %>
         <% "king" -> %>
-          <div class="field">
-            <label for="king-discard">Discard one card after taking the King's Rare</label>
-            <select id="king-discard" name="character_setup[discard]" class="input" required>
-              <%= for card <- @hand do %>
-                <option value={card.id}>{card_label(card)}</option>
-              <% end %>
-            </select>
-          </div>
-          <p class="body-sm muted">
-            The King's Exclusive Rare is added to your hand. Choose one card to discard before play begins.
-          </p>
+          <input type="hidden" name="character_setup[discard]" value={@selected_setup_card_id || ""} />
+          <.setup_hand_selector
+            id="king-discard-hand"
+            hand={@hand}
+            label="Discard one card after taking the King's Rare"
+            selected_card_id={@selected_setup_card_id}
+            selectable={true}
+          />
         <% "gambler" -> %>
+          <.setup_hand_selector
+            id="gambler-reference-hand"
+            hand={@hand}
+            label="Your hand"
+            selected_card_id=""
+            selectable={false}
+          />
           <div class="game-form-grid">
             <div class="field">
               <label for="gambler-bid">Bid</label>
@@ -436,6 +457,47 @@ defmodule TricktakersWebWeb.GameLive do
 
       <button type="submit" class="btn lg">Complete setup</button>
     </.form>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :hand, :list, required: true
+  attr :label, :string, required: true
+  attr :selected_card_id, :string, default: nil
+  attr :selectable, :boolean, default: false
+
+  defp setup_hand_selector(assigns) do
+    ~H"""
+    <div class="game-setup-hand-field">
+      <div class="field-label">{@label}</div>
+      <div id={@id} class="game-setup-hand" role={if @selectable, do: "radiogroup", else: nil}>
+        <%= for card <- @hand do %>
+          <button
+            type="button"
+            class={[
+              "game-setup-card-button",
+              @selected_card_id == card.id && "selected",
+              not @selectable && "read-only"
+            ]}
+            phx-click={if @selectable, do: "select_setup_card", else: nil}
+            phx-value-card={if @selectable, do: card.id, else: nil}
+            disabled={!@selectable}
+            aria-checked={if @selectable, do: @selected_card_id == card.id, else: nil}
+            role={if @selectable, do: "radio", else: nil}
+            title={card_label(card)}
+          >
+            <.playing_card card={card} />
+          </button>
+        <% end %>
+      </div>
+      <%= if @selectable do %>
+        <p class="body-sm muted game-setup-hand-hint">
+          {if @selected_card_id,
+            do: "Selected card will be discarded.",
+            else: "Select a card to discard."}
+        </p>
+      <% end %>
+    </div>
     """
   end
 
@@ -476,7 +538,6 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   attr :room, :map, default: nil
-  attr :player_name, :string, required: true
 
   defp game_bar(assigns) do
     ~H"""
@@ -490,12 +551,6 @@ defmodule TricktakersWebWeb.GameLive do
         </.link>
         <.link navigate={~p"/characters"}>Characters</.link>
       </nav>
-      <%= if @room && @player_name != "" do %>
-        <div class="you">
-          <span>You're playing as <strong>{@player_name}</strong></span>
-          <span class="avatar a4">{initial(@player_name)}</span>
-        </div>
-      <% end %>
     </div>
     """
   end
@@ -872,6 +927,19 @@ defmodule TricktakersWebWeb.GameLive do
 
   defp character_by_id(nil), do: nil
   defp character_by_id(id), do: Enum.find(character_roster(), &(&1.id == id))
+
+  defp current_setup_character_id(%{
+         game: %{
+           character_setup_order: order,
+           current_setup_index: index,
+           character_picks: picks
+         }
+       }) do
+    current_player = Enum.at(order || [], index || 0)
+    Map.get(picks || %{}, current_player)
+  end
+
+  defp current_setup_character_id(_room), do: nil
 
   defp character_roster do
     [
