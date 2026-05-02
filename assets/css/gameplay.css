@@ -1,0 +1,315 @@
+/* Active gameplay screen
+   Scoped to game-* classes so gameplay layout changes do not affect shared pages. */
+
+.game-app {
+  background: var(--paper-2);
+}
+
+.game-nav .you {
+  margin-left: var(--s-3);
+}
+
+.game-table-shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: calc(100vh - 60px);
+}
+
+.game-status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-7);
+  border-bottom: 1px solid var(--hair);
+  background: var(--paper);
+}
+
+.game-status-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--hair-strong);
+}
+
+.game-status-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.game-play-area {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--s-5);
+  padding: var(--s-6) var(--s-7);
+  align-items: center;
+}
+
+.game-opponents {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-around;
+  gap: var(--s-5);
+}
+
+.game-opponent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-opponent .seat {
+  padding: 8px 14px;
+}
+
+.game-opponent-hand {
+  display: flex;
+}
+
+.game-opponent-hand .pcard {
+  margin-left: -22px;
+  box-shadow: var(--sh-card), -2px 0 0 rgba(255,255,255,0.6);
+  transition: transform 200ms ease;
+}
+
+.game-opponent-hand .pcard:first-child {
+  margin-left: 0;
+}
+
+.game-opponent-hand .pcard:nth-child(1) {
+  transform: rotate(-6deg) translateY(2px);
+}
+
+.game-opponent-hand .pcard:nth-child(2) {
+  transform: rotate(0deg) translateY(-2px);
+  z-index: 2;
+}
+
+.game-opponent-hand .pcard:nth-child(3) {
+  transform: rotate(6deg) translateY(2px);
+}
+
+.game-center-stage {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-5);
+}
+
+.game-trick-meta {
+  display: flex;
+  gap: var(--s-5);
+  align-items: center;
+  padding: 10px 18px;
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+}
+
+.game-lead-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.game-lead-dot.red {
+  background: var(--suit-red);
+}
+
+.game-trick {
+  width: 360px;
+  height: 220px;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.game-trick-play,
+.game-trick-slot {
+  position: absolute;
+}
+
+.game-trick-play .pcard {
+  transition: transform 220ms cubic-bezier(.2,.8,.2,1);
+}
+
+.game-trick-slot {
+  width: 96px;
+  height: 140px;
+  border: 2px dashed var(--hair-strong);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.game-declare-row .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.game-player-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 240px 1fr 240px;
+  gap: var(--s-5);
+  align-items: center;
+  padding-top: var(--s-4);
+}
+
+.game-player-info {
+  display: flex;
+  gap: var(--s-4);
+  align-items: center;
+}
+
+.game-hand-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.game-hand {
+  width: min(540px, 100%);
+  height: 180px;
+}
+
+.game-hand .pcard {
+  border: 0;
+}
+
+.game-hand .pcard.playable:hover:not(:disabled) {
+  transform: translateX(var(--hand-x)) translateY(calc(var(--hand-y) - 12px)) rotate(var(--hand-rot));
+}
+
+.game-hand .pcard.selected,
+.game-hand .pcard:focus-visible:not(:disabled) {
+  transform: translateX(var(--hand-x)) translateY(calc(var(--hand-y) - 18px)) rotate(var(--hand-rot));
+  box-shadow: 0 24px 48px -12px rgba(24,23,21,0.32);
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.game-turn-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.game-turn-copy {
+  text-align: right;
+}
+
+.game-timer {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  background: var(--paper);
+}
+
+.game-stat-pills {
+  justify-content: flex-end;
+}
+
+@media (max-width: 1100px) {
+  .game-status-bar,
+  .game-status-actions {
+    flex-wrap: wrap;
+  }
+
+  .game-status-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .game-play-area {
+    grid-template-columns: 1fr;
+    padding: var(--s-5);
+  }
+
+  .game-opponents {
+    flex-wrap: wrap;
+  }
+
+  .game-center-stage,
+  .game-player-panel {
+    grid-column: 1;
+  }
+
+  .game-player-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .game-player-info,
+  .game-turn-panel,
+  .game-stat-pills {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .game-turn-copy {
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .game-status-bar {
+    padding: var(--s-4);
+  }
+
+  .game-status-actions {
+    gap: var(--s-2);
+  }
+
+  .game-crown-ledger,
+  .game-status-separator {
+    display: none;
+  }
+
+  .game-play-area {
+    padding: var(--s-4);
+  }
+
+  .game-opponents {
+    align-items: stretch;
+  }
+
+  .game-opponent {
+    width: 100%;
+  }
+
+  .game-opponent .seat,
+  .game-player-panel .seat {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .game-trick {
+    width: min(100%, 320px);
+    height: 200px;
+  }
+
+  .game-trick-meta {
+    gap: var(--s-3);
+    font-size: 13px;
+  }
+
+  .game-hand {
+    height: 160px;
+    overflow-x: clip;
+  }
+}

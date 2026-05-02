@@ -3,6 +3,7 @@
 
 @import "tailwindcss" source(none);
 @import "./tricktakers.css";
+@import "./gameplay.css";
 @source "../css";
 @source "../js";
 @source "../../lib/tricktakers_web_web";
