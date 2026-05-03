@@ -9,17 +9,22 @@ defmodule TricktakersWebWeb.GameLive do
     code = String.upcase(params["code"] || "")
     room = RoomRegistry.get_room(code)
     player_session_id = session["player_session_id"]
-    if connected?(socket) and room, do: RoomRegistry.subscribe_room(code)
+    connected? = connected?(socket)
+    if connected? and room, do: RoomRegistry.subscribe_room(code)
 
-    {:ok,
-     socket
-     |> assign(:room, room)
-     |> assign(:player_session_id, player_session_id)
-     |> assign(:player_name, (room && RoomRegistry.player_name(room, player_session_id)) || "")
-     |> assign(:selected_character_id, nil)
-     |> assign(:setup_state, SetupState.new())
-     |> assign(:selection_error, nil)
-     |> assign(:setup_error, nil)}
+    socket =
+      socket
+      |> assign(:room, room)
+      |> assign(:player_session_id, player_session_id)
+      |> assign(:player_name, (room && RoomRegistry.player_name(room, player_session_id)) || "")
+      |> assign(:selected_character_id, nil)
+      |> assign(:setup_state, SetupState.new())
+      |> assign(:selection_error, nil)
+      |> assign(:setup_error, nil)
+
+    socket = if connected?, do: maybe_auto_complete_setup(socket), else: socket
+
+    {:ok, socket}
   end
 
   @impl true
@@ -34,7 +39,8 @@ defmodule TricktakersWebWeb.GameLive do
      |> assign(
        :setup_state,
        setup_state_for(room, socket.assigns.player_session_id, socket.assigns.setup_state)
-     )}
+     )
+     |> maybe_auto_complete_setup()}
   end
 
   @impl true
@@ -380,18 +386,26 @@ defmodule TricktakersWebWeb.GameLive do
           </div>
           <p class="body game-setup-copy">{@setup.current_character.ability}</p>
 
-          <%= if @setup.your_turn? do %>
-            <.character_setup_form
-              character={@setup.current_character}
-              setup_state={@setup_state}
-            />
-          <% else %>
-            <div class="panel-soft game-waiting-card">
-              <div class="tt-heading-3">Waiting for {@setup.current_player}</div>
-              <p class="body-sm">
-                They are resolving {@setup.current_character.name}. You will continue automatically when setup reaches your character or play begins.
-              </p>
-            </div>
+          <%= cond do %>
+            <% @setup.your_turn? and setup_requires_input?(@setup.current_character.id) -> %>
+              <.character_setup_form
+                character={@setup.current_character}
+                setup_state={@setup_state}
+              />
+            <% @setup.your_turn? -> %>
+              <div class="panel-soft game-waiting-card">
+                <div class="tt-heading-3">Resolving automatically</div>
+                <p class="body-sm">
+                  This character does not need setup choices right now. The game will continue automatically.
+                </p>
+              </div>
+            <% true -> %>
+              <div class="panel-soft game-waiting-card">
+                <div class="tt-heading-3">Waiting for {@setup.current_player}</div>
+                <p class="body-sm">
+                  They are resolving {@setup.current_character.name}. You will continue automatically when setup reaches your character or play begins.
+                </p>
+              </div>
           <% end %>
 
           <%= if @setup_error do %>
@@ -515,15 +529,11 @@ defmodule TricktakersWebWeb.GameLive do
           </div>
         <% _character_id -> %>
           <input type="hidden" name="character_setup[notes]" value="auto" />
-          <div class="panel-soft game-waiting-card">
-            <div class="tt-heading-3">No choice needed</div>
-            <p class="body-sm">
-              This character's setup can be marked complete for now. More detailed setup controls can be added as the rules engine grows.
-            </p>
-          </div>
       <% end %>
 
-      <button type="submit" class="btn lg">Complete setup</button>
+      <%= if setup_requires_input?(@character.id) do %>
+        <button type="submit" class="btn lg">Complete setup</button>
+      <% end %>
     </.form>
     """
   end
@@ -1033,6 +1043,42 @@ defmodule TricktakersWebWeb.GameLive do
       setup_state
     )
   end
+
+  defp maybe_auto_complete_setup(socket) do
+    room = socket.assigns.room
+    player_session_id = socket.assigns.player_session_id
+
+    if auto_complete_setup?(room, player_session_id) do
+      case RoomRegistry.complete_character_setup(room.code, player_session_id, %{
+             "notes" => "auto"
+           }) do
+        {:ok, room} ->
+          assign(socket,
+            room: room,
+            setup_state: setup_state_for(room, player_session_id, socket.assigns.setup_state),
+            setup_error: nil
+          )
+
+        {:error, reason} ->
+          assign(socket, :setup_error, reason)
+      end
+    else
+      socket
+    end
+  end
+
+  defp auto_complete_setup?(%{game: %{phase: :character_setup} = game}, player_session_id) do
+    current_player_id = Enum.at(game.character_setup_order || [], game.current_setup_index || 0)
+    character_id = Map.get(game.character_picks || %{}, current_player_id)
+
+    current_player_id == player_session_id and
+      not Map.has_key?(game.character_setup_done || %{}, player_session_id) and
+      not setup_requires_input?(character_id)
+  end
+
+  defp auto_complete_setup?(_room, _player_session_id), do: false
+
+  defp setup_requires_input?(character_id), do: character_id in ["king", "gambler"]
 
   defp characters_for_mode("Advanced"), do: character_roster()
   defp characters_for_mode(_mode), do: Enum.filter(character_roster(), &(&1.group == :basic))
