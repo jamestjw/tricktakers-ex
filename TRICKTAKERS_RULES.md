@@ -64,8 +64,9 @@ Win by one of these paths:
 
 ### Gambler
 - Setup: immediately gain 20 points.
-- Setup: use the Bidding Card to declare how many tricks you will win.
-- Setup: you may discard any number of cards and draw that many back, up to 2 times.
+- Setup: before bidding, you may perform up to 2 redraw actions.
+- Redraw action: choose any number of cards from your hand, discard those cards, then draw the same number of cards so your hand returns to 5 cards.
+- Setup: after you finish any redraw actions, use the Bidding Card to declare how many tricks you will win and choose your wager.
 - Win condition: hit your bid, or win all 5 tricks.
 - Round 3: you may bet up to 100 points instead of 50.
 

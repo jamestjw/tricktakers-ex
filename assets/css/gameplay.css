@@ -491,6 +491,22 @@
   margin-top: calc(var(--s-2) * -1);
 }
 
+.game-gambler-redraw-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.game-gambler-redraw-card p {
+  margin-top: 4px;
+}
+
+.game-gambler-redraw-card .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .game-waiting-card {
   margin-top: var(--s-5);
 }
@@ -632,6 +648,11 @@
   }
 
   .game-character-setup-head {
+    flex-direction: column;
+  }
+
+  .game-gambler-redraw-card {
+    align-items: stretch;
     flex-direction: column;
   }
 }

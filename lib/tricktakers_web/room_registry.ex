@@ -37,6 +37,10 @@ defmodule TricktakersWeb.RoomRegistry do
     GenServer.call(__MODULE__, {:complete_character_setup, code, player_session_id, attrs})
   end
 
+  def redraw_gambler_hand(code, player_session_id, card_ids) do
+    GenServer.call(__MODULE__, {:redraw_gambler_hand, code, player_session_id, card_ids})
+  end
+
   def player_name(room, player_session_id) do
     room
     |> player_for_session(player_session_id)
@@ -136,7 +140,7 @@ defmodule TricktakersWeb.RoomRegistry do
          :ok <- ensure_host(found_room, valid_session_id),
          :ok <- ensure_minimum_players(found_room) do
       player_ids = Enum.map(found_room.players, & &1.id)
-      hands = Deck.deal(player_ids)
+      {hands, draw_pile} = Deck.deal_with_draw_pile(player_ids)
 
       game = %{
         started_at: DateTime.utc_now(),
@@ -146,6 +150,9 @@ defmodule TricktakersWeb.RoomRegistry do
         lead: hd(player_ids),
         character_order: player_ids,
         hands: hands,
+        draw_pile: draw_pile,
+        discards: [],
+        gambler_redraws: %{},
         character_picks: %{},
         current_picker_index: 0,
         character_setup_order: [],
@@ -231,6 +238,32 @@ defmodule TricktakersWeb.RoomRegistry do
         |> Map.put(:current_setup_index, next_setup_index(game, setup_done))
         |> Map.put(:phase, if(all_setup?, do: :playing, else: :character_setup))
 
+      updated_room =
+        found_room
+        |> Map.put(:game, game)
+        |> Map.put(:updated_at, DateTime.utc_now())
+
+      new_state = put_in(state, [:rooms, updated_room.code], updated_room)
+      broadcast_rooms(new_state)
+      broadcast_room(updated_room)
+      {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:redraw_gambler_hand, code, player_session_id, card_ids}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_character_setup_phase(game),
+         :ok <- ensure_current_setup_player(game, valid_session_id),
+         :ok <- ensure_current_character(game, valid_session_id, "gambler"),
+         {:ok, discard_ids} <- validate_redraw_card_ids(game, valid_session_id, card_ids),
+         :ok <- ensure_gambler_redraw_available(game, valid_session_id),
+         {:ok, game} <- redraw_hand(game, valid_session_id, discard_ids) do
       updated_room =
         found_room
         |> Map.put(:game, game)
@@ -370,6 +403,64 @@ defmodule TricktakersWeb.RoomRegistry do
 
   defp current_setup_player(game),
     do: Enum.at(game.character_setup_order, game.current_setup_index)
+
+  defp ensure_current_character(game, player_session_id, character_id) do
+    if Map.get(game.character_picks || %{}, player_session_id) == character_id,
+      do: :ok,
+      else: {:error, "This setup action is not available for your character"}
+  end
+
+  defp ensure_gambler_redraw_available(game, player_session_id) do
+    redraw_count = game |> Map.get(:gambler_redraws, %{}) |> Map.get(player_session_id, 0)
+
+    if redraw_count < 2,
+      do: :ok,
+      else: {:error, "Gambler can redraw at most twice"}
+  end
+
+  defp validate_redraw_card_ids(game, player_session_id, card_ids) when is_list(card_ids) do
+    hand = get_in(game, [:hands, player_session_id]) || []
+    hand_ids = MapSet.new(Enum.map(hand, & &1.id))
+    discard_ids = Enum.uniq(card_ids)
+
+    cond do
+      discard_ids == [] ->
+        {:error, "Choose at least one card to redraw"}
+
+      Enum.all?(discard_ids, &MapSet.member?(hand_ids, &1)) ->
+        {:ok, discard_ids}
+
+      true ->
+        {:error, "Choose cards from your current hand"}
+    end
+  end
+
+  defp validate_redraw_card_ids(_game, _player_session_id, _card_ids),
+    do: {:error, "Choose cards from your current hand"}
+
+  defp redraw_hand(game, player_session_id, discard_ids) do
+    draw_pile = Map.get(game, :draw_pile, [])
+    draw_count = length(discard_ids)
+
+    if length(draw_pile) < draw_count do
+      {:error, "There are not enough cards to redraw"}
+    else
+      {drawn_cards, remaining_draw_pile} = Enum.split(draw_pile, draw_count)
+      hand = get_in(game, [:hands, player_session_id]) || []
+      {discarded_cards, kept_cards} = Enum.split_with(hand, &(&1.id in discard_ids))
+      redraws = Map.get(game, :gambler_redraws, %{})
+      redraw_count = Map.get(redraws, player_session_id, 0)
+
+      game =
+        game
+        |> put_in([:hands, player_session_id], kept_cards ++ drawn_cards)
+        |> Map.put(:draw_pile, remaining_draw_pile)
+        |> Map.put(:discards, Map.get(game, :discards, []) ++ discarded_cards)
+        |> Map.put(:gambler_redraws, Map.put(redraws, player_session_id, redraw_count + 1))
+
+      {:ok, game}
+    end
+  end
 
   defp next_picker_index(game, picks) do
     Enum.find_index(game.character_order, fn player -> not Map.has_key?(picks, player) end) ||

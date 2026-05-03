@@ -18,18 +18,30 @@ defmodule TricktakersWeb.Game.Deck do
 
   @spec deal([String.t()], pos_integer()) :: %{String.t() => [Card.t()]}
   def deal(player_ids, cards_per_player \\ 5) do
+    {hands, _draw_pile} = deal_with_draw_pile(player_ids, cards_per_player)
+    hands
+  end
+
+  @spec deal_with_draw_pile([String.t()], pos_integer()) ::
+          {%{String.t() => [Card.t()]}, [Card.t()]}
+  def deal_with_draw_pile(player_ids, cards_per_player \\ 5) do
     deck = shuffle(standard_deck())
 
-    player_ids
-    |> Enum.with_index()
-    |> Map.new(fn {player_id, index} ->
-      hand =
-        deck
-        |> Enum.drop(index * cards_per_player)
-        |> Enum.take(cards_per_player)
+    hands =
+      player_ids
+      |> Enum.with_index()
+      |> Map.new(fn {player_id, index} ->
+        hand =
+          deck
+          |> Enum.drop(index * cards_per_player)
+          |> Enum.take(cards_per_player)
 
-      {player_id, hand}
-    end)
+        {player_id, hand}
+      end)
+
+    draw_pile = Enum.drop(deck, length(player_ids) * cards_per_player)
+
+    {hands, draw_pile}
   end
 
   defp number_cards do
