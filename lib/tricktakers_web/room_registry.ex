@@ -226,9 +226,11 @@ defmodule TricktakersWeb.RoomRegistry do
          {:ok, valid_session_id} <- validate_session_id(player_session_id),
          {:ok, game} <- fetch_game(found_room),
          :ok <- ensure_character_setup_phase(game),
-         :ok <- ensure_current_setup_player(game, valid_session_id) do
+         :ok <- ensure_current_setup_player(game, valid_session_id),
+         setup_attrs = normalize_setup_attrs(attrs),
+         {:ok, game} <- apply_character_setup(game, valid_session_id, setup_attrs) do
       setup_done =
-        Map.put(game.character_setup_done, valid_session_id, normalize_setup_attrs(attrs))
+        Map.put(game.character_setup_done, valid_session_id, setup_attrs)
 
       all_setup? = map_size(setup_done) == length(game.character_setup_order)
 
@@ -408,6 +410,43 @@ defmodule TricktakersWeb.RoomRegistry do
     if Map.get(game.character_picks || %{}, player_session_id) == character_id,
       do: :ok,
       else: {:error, "This setup action is not available for your character"}
+  end
+
+  defp apply_character_setup(game, player_session_id, setup_attrs) do
+    case Map.get(game.character_picks || %{}, player_session_id) do
+      "king" -> apply_king_setup(game, player_session_id, setup_attrs)
+      _character_id -> {:ok, game}
+    end
+  end
+
+  defp apply_king_setup(game, player_session_id, setup_attrs) do
+    discard_id = String.trim(setup_attrs["discard"] || "")
+    hand = get_in(game, [:hands, player_session_id]) || []
+
+    cond do
+      discard_id == "" ->
+        {:error, "Choose one card to discard"}
+
+      discard_id == king_rare_card().id ->
+        {:error, "King must discard a card from the original hand"}
+
+      not Enum.any?(hand, &(&1.id == discard_id)) ->
+        {:error, "Choose a card from your current hand"}
+
+      true ->
+        {discarded_cards, kept_cards} = Enum.split_with(hand, &(&1.id == discard_id))
+
+        game =
+          game
+          |> put_in([:hands, player_session_id], kept_cards ++ [king_rare_card()])
+          |> Map.put(:discards, Map.get(game, :discards, []) ++ discarded_cards)
+
+        {:ok, game}
+    end
+  end
+
+  defp king_rare_card do
+    %{id: "king-rare", kind: :rare}
   end
 
   defp ensure_gambler_redraw_available(game, player_session_id) do
