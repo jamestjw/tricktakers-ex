@@ -1,6 +1,7 @@
 defmodule TricktakersWebWeb.GameLive do
   use TricktakersWebWeb, :live_view
 
+  alias TricktakersWeb.Game.SetupState
   alias TricktakersWeb.RoomRegistry
 
   @impl true
@@ -16,8 +17,7 @@ defmodule TricktakersWebWeb.GameLive do
      |> assign(:player_session_id, player_session_id)
      |> assign(:player_name, (room && RoomRegistry.player_name(room, player_session_id)) || "")
      |> assign(:selected_character_id, nil)
-     |> assign(:selected_setup_card_id, nil)
-     |> assign(:selected_gambler_card_ids, [])
+     |> assign(:setup_state, SetupState.new())
      |> assign(:selection_error, nil)
      |> assign(:setup_error, nil)}
   end
@@ -31,7 +31,10 @@ defmodule TricktakersWebWeb.GameLive do
     {:noreply,
      socket
      |> assign(room: room, player_name: player_name)
-     |> prune_selected_gambler_cards(room)}
+     |> assign(
+       :setup_state,
+       setup_state_for(room, socket.assigns.player_session_id, socket.assigns.setup_state)
+     )}
   end
 
   @impl true
@@ -62,30 +65,34 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   def handle_event("select_setup_card", %{"card" => card_id}, socket) do
-    {:noreply, assign(socket, selected_setup_card_id: card_id, setup_error: nil)}
+    {:noreply,
+     assign(socket,
+       setup_state: SetupState.select_king_card(socket.assigns.setup_state, card_id),
+       setup_error: nil
+     )}
   end
 
   def handle_event("toggle_gambler_card", %{"card" => card_id}, socket) do
-    selected_card_ids = socket.assigns.selected_gambler_card_ids
-
-    selected_card_ids =
-      if card_id in selected_card_ids do
-        List.delete(selected_card_ids, card_id)
-      else
-        selected_card_ids ++ [card_id]
-      end
-
-    {:noreply, assign(socket, selected_gambler_card_ids: selected_card_ids, setup_error: nil)}
+    {:noreply,
+     assign(socket,
+       setup_state: SetupState.toggle_gambler_card(socket.assigns.setup_state, card_id),
+       setup_error: nil
+     )}
   end
 
   def handle_event("redraw_gambler_hand", _params, socket) do
     case RoomRegistry.redraw_gambler_hand(
            socket.assigns.room.code,
            socket.assigns.player_session_id,
-           socket.assigns.selected_gambler_card_ids
+           SetupState.selected_gambler_card_ids(socket.assigns.setup_state)
          ) do
       {:ok, room} ->
-        {:noreply, assign(socket, room: room, selected_gambler_card_ids: [], setup_error: nil)}
+        setup_state =
+          room
+          |> setup_state_for(socket.assigns.player_session_id, socket.assigns.setup_state)
+          |> SetupState.clear_selections()
+
+        {:noreply, assign(socket, room: room, setup_state: setup_state, setup_error: nil)}
 
       {:error, reason} ->
         {:noreply, assign(socket, :setup_error, reason)}
@@ -108,8 +115,7 @@ defmodule TricktakersWebWeb.GameLive do
           {:noreply,
            assign(socket,
              room: room,
-             selected_setup_card_id: nil,
-             selected_gambler_card_ids: [],
+             setup_state: SetupState.clear_selections(socket.assigns.setup_state),
              setup_error: nil
            )}
 
@@ -157,7 +163,7 @@ defmodule TricktakersWebWeb.GameLive do
                   <.character_setup_phase
                     room={@room}
                     player_session_id={@player_session_id}
-                    selected_setup_card_id={@selected_setup_card_id}
+                    setup_state={@setup_state}
                     setup_error={@setup_error}
                   />
                 <% _phase -> %>
@@ -322,12 +328,17 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
-  attr :selected_setup_card_id, :string, default: nil
+  attr :setup_state, :map, required: true
   attr :setup_error, :string, default: nil
 
   defp character_setup_phase(assigns) do
     assigns =
-      assign(assigns, :setup, character_setup_state(assigns.room, assigns.player_session_id))
+      assigns
+      |> assign(:setup, character_setup_state(assigns.room, assigns.player_session_id))
+      |> assign(
+        :setup_state,
+        setup_state_for(assigns.room, assigns.player_session_id, assigns.setup_state)
+      )
 
     ~H"""
     <section id="character-setup" class="game-setup page-wide">
@@ -372,10 +383,7 @@ defmodule TricktakersWebWeb.GameLive do
           <%= if @setup.your_turn? do %>
             <.character_setup_form
               character={@setup.current_character}
-              hand={@setup.hand_preview}
-              selected_setup_card_id={@selected_setup_card_id}
-              selected_gambler_card_ids={@selected_gambler_card_ids}
-              gambler_redraw_count={@setup.gambler_redraw_count}
+              setup_state={@setup_state}
             />
           <% else %>
             <div class="panel-soft game-waiting-card">
@@ -432,13 +440,18 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   attr :character, :map, required: true
-  attr :hand, :list, required: true
-  attr :selected_setup_card_id, :string, default: nil
-  attr :selected_gambler_card_ids, :list, default: []
-  attr :gambler_redraw_count, :integer, default: 0
+  attr :setup_state, :map, required: true
 
   defp character_setup_form(assigns) do
-    assigns = assign(assigns, :form, to_form(%{}, as: :character_setup))
+    assigns =
+      assigns
+      |> assign(:form, to_form(%{}, as: :character_setup))
+      |> assign(:selected_king_card_id, SetupState.selected_king_card_id(assigns.setup_state))
+      |> assign(
+        :selected_gambler_card_ids,
+        SetupState.selected_gambler_card_ids(assigns.setup_state)
+      )
+      |> assign(:gambler_redraw_count, SetupState.redraw_count(assigns.setup_state))
 
     ~H"""
     <.form
@@ -449,18 +462,18 @@ defmodule TricktakersWebWeb.GameLive do
     >
       <%= case @character.id do %>
         <% "king" -> %>
-          <input type="hidden" name="character_setup[discard]" value={@selected_setup_card_id || ""} />
+          <input type="hidden" name="character_setup[discard]" value={@selected_king_card_id || ""} />
           <.setup_hand_selector
             id="king-discard-hand"
-            hand={@hand}
+            hand={@setup_state.hand}
             label="Discard one card after taking the King's Rare"
-            selected_card_id={@selected_setup_card_id}
+            selected_card_id={@selected_king_card_id}
             selectable={true}
           />
         <% "gambler" -> %>
           <.setup_hand_selector
             id="gambler-reference-hand"
-            hand={@hand}
+            hand={@setup_state.hand}
             label="Choose cards to discard"
             selected_card_ids={@selected_gambler_card_ids}
             event="toggle_gambler_card"
@@ -1002,13 +1015,22 @@ defmodule TricktakersWebWeb.GameLive do
   defp maybe_put_size(card, nil), do: card
   defp maybe_put_size(card, size), do: Map.put(card, :size, size)
 
-  defp prune_selected_gambler_cards(socket, room) do
-    hand_ids = room |> hand_for(socket.assigns.player_session_id) |> Enum.map(& &1.id)
+  defp setup_state_for(room, player_session_id, setup_state) do
+    game = room && room.game
 
-    assign(
-      socket,
-      :selected_gambler_card_ids,
-      Enum.filter(socket.assigns.selected_gambler_card_ids, &(&1 in hand_ids))
+    current_player =
+      game && Enum.at(game.character_setup_order || [], game.current_setup_index || 0)
+
+    character_id = game && Map.get(game.character_picks || %{}, current_player)
+
+    redraw_count =
+      game |> Kernel.||(%{}) |> Map.get(:gambler_redraws, %{}) |> Map.get(player_session_id, 0)
+
+    SetupState.for_character(
+      character_id,
+      hand_for(room, player_session_id, :sm),
+      redraw_count,
+      setup_state
     )
   end
 

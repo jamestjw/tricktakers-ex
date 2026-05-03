@@ -149,6 +149,7 @@ defmodule TricktakersWeb.RoomRegistry do
         trick: 1,
         lead: hd(player_ids),
         character_order: player_ids,
+        points: Map.new(player_ids, &{&1, 30}),
         hands: hands,
         draw_pile: draw_pile,
         discards: [],
@@ -199,6 +200,7 @@ defmodule TricktakersWeb.RoomRegistry do
           |> Map.put(:character_setup_order, setup_order)
           |> Map.put(:character_setup_done, %{})
           |> Map.put(:current_setup_index, 0)
+          |> apply_setup_start_bonuses()
         else
           game
           |> Map.put(:character_picks, picks)
@@ -419,6 +421,16 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
+  defp apply_setup_start_bonuses(game) do
+    Enum.reduce(game.character_picks, game, fn {player_session_id, character_id}, game ->
+      if character_id == "gambler" do
+        update_in(game, [:points, player_session_id], &((&1 || 0) + 20))
+      else
+        game
+      end
+    end)
+  end
+
   defp apply_king_setup(game, player_session_id, setup_attrs) do
     discard_id = String.trim(setup_attrs["discard"] || "")
     hand = get_in(game, [:hands, player_session_id]) || []
@@ -486,19 +498,34 @@ defmodule TricktakersWeb.RoomRegistry do
     else
       {drawn_cards, remaining_draw_pile} = Enum.split(draw_pile, draw_count)
       hand = get_in(game, [:hands, player_session_id]) || []
-      {discarded_cards, kept_cards} = Enum.split_with(hand, &(&1.id in discard_ids))
+      discard_id_set = MapSet.new(discard_ids)
+
+      {new_hand, discarded_cards, _drawn_cards} =
+        replace_discarded_cards(hand, discard_id_set, drawn_cards)
+
       redraws = Map.get(game, :gambler_redraws, %{})
       redraw_count = Map.get(redraws, player_session_id, 0)
 
       game =
         game
-        |> put_in([:hands, player_session_id], kept_cards ++ drawn_cards)
+        |> put_in([:hands, player_session_id], new_hand)
         |> Map.put(:draw_pile, remaining_draw_pile)
         |> Map.put(:discards, Map.get(game, :discards, []) ++ discarded_cards)
         |> Map.put(:gambler_redraws, Map.put(redraws, player_session_id, redraw_count + 1))
 
       {:ok, game}
     end
+  end
+
+  defp replace_discarded_cards(hand, discard_id_set, drawn_cards) do
+    Enum.reduce(hand, {[], [], drawn_cards}, fn card, {new_hand, discarded_cards, drawn_cards} ->
+      if MapSet.member?(discard_id_set, card.id) do
+        [replacement | drawn_cards] = drawn_cards
+        {new_hand ++ [replacement], discarded_cards ++ [card], drawn_cards}
+      else
+        {new_hand ++ [card], discarded_cards, drawn_cards}
+      end
+    end)
   end
 
   defp next_picker_index(game, picks) do

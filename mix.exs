@@ -8,6 +8,7 @@ defmodule TricktakersWeb.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      dialyzer: [plt_add_apps: [:mix, :ex_unit]],
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
@@ -60,6 +61,7 @@ defmodule TricktakersWeb.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:bandit, "~> 1.5"}
     ]
   end
@@ -80,6 +82,7 @@ defmodule TricktakersWeb.MixProject do
         "esbuild tricktakers_web --minify",
         "phx.digest"
       ],
+      dialyzer: ["dialyzer --format short"],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end
