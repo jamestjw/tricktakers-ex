@@ -417,6 +417,7 @@ defmodule TricktakersWeb.RoomRegistry do
   defp apply_character_setup(game, player_session_id, setup_attrs) do
     case Map.get(game.character_picks || %{}, player_session_id) do
       "king" -> apply_king_setup(game, player_session_id, setup_attrs)
+      "gambler" -> apply_gambler_setup(game, setup_attrs)
       _character_id -> {:ok, game}
     end
   end
@@ -459,6 +460,29 @@ defmodule TricktakersWeb.RoomRegistry do
 
   defp king_rare_card do
     %{id: "king-rare", kind: :rare}
+  end
+
+  defp apply_gambler_setup(game, setup_attrs) do
+    with {:ok, _bid} <- validate_gambler_bid(setup_attrs["bid"]),
+         {:ok, _wager} <- validate_gambler_wager(setup_attrs["wager"], game.round) do
+      {:ok, game}
+    end
+  end
+
+  defp validate_gambler_bid(value) do
+    case Integer.parse(to_string(value || "")) do
+      {bid, ""} when bid in 0..5 -> {:ok, bid}
+      _ -> {:error, "Gambler bid must be between 0 and 5"}
+    end
+  end
+
+  defp validate_gambler_wager(value, round) do
+    max_wager = if round == 3, do: 100, else: 50
+
+    case Integer.parse(to_string(value || "")) do
+      {wager, ""} when wager >= 0 and wager <= max_wager -> {:ok, wager}
+      _ -> {:error, "Gambler wager must be between 0 and #{max_wager}"}
+    end
   end
 
   defp ensure_gambler_redraw_available(game, player_session_id) do
