@@ -166,6 +166,48 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.trick_wins[host_id] == 1
   end
 
+  test "rare and white flag can be played while holding the lead suit" do
+    {room, host_id, player_id} = start_playing_game("Colorless Plays")
+    red_3 = %{id: "test-red-3", kind: :number, suit: :red, rank: 3}
+    red_7 = %{id: "test-red-7", kind: :number, suit: :red, rank: 7}
+    rare = %{id: "test-rare", kind: :rare}
+    room = put_player_hands(room, %{host_id => [red_3], player_id => [red_7, rare]})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, red_3.id)
+    assert {:ok, room} = RoomRegistry.play_card(room.code, player_id, rare.id)
+
+    assert room.game.completed_tricks == [
+             %{
+               trick: 1,
+               lead_suit: :red,
+               plays: [%{player_id: host_id, card: red_3}, %{player_id: player_id, card: rare}],
+               winner_id: player_id
+             }
+           ]
+
+    white_flag = %{id: "test-white-flag", kind: :white_flag}
+    black_9 = %{id: "test-black-9", kind: :number, suit: :black, rank: 9}
+    red_9 = %{id: "test-red-9", kind: :number, suit: :red, rank: 9}
+    room = put_player_hands(room, %{player_id => [black_9], host_id => [red_9, white_flag]})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, player_id, black_9.id)
+    assert {:ok, room} = RoomRegistry.play_card(room.code, host_id, white_flag.id)
+    assert room.game.trick_wins[player_id] == 2
+  end
+
+  test "colorless lead does not create a suit obligation until a number card is played" do
+    {room, host_id, player_id} = start_playing_game("Colorless Lead")
+    rare = %{id: "test-rare", kind: :rare}
+    red_7 = %{id: "test-red-7", kind: :number, suit: :red, rank: 7}
+    blue_5 = %{id: "test-blue-5", kind: :number, suit: :blue, rank: 5}
+    room = put_player_hands(room, %{host_id => [rare], player_id => [red_7, blue_5]})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, rare.id)
+    assert {:ok, room} = RoomRegistry.play_card(room.code, player_id, blue_5.id)
+
+    assert [%{lead_suit: :blue, winner_id: ^host_id}] = room.game.completed_tricks
+  end
+
   defp start_king_gambler_setup(room_name) do
     host_id = "gambler-host-#{System.unique_integer([:positive])}"
     player_id = "gambler-player-#{System.unique_integer([:positive])}"
