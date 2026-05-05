@@ -107,6 +107,65 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.character_setup_done[player_id] == %{"bid" => "5", "wager" => "100"}
   end
 
+  test "current player can play a legal card to the current trick" do
+    {room, host_id, player_id} = start_playing_game("Legal Play")
+    red_3 = %{id: "test-red-3", kind: :number, suit: :red, rank: 3}
+    blue_5 = %{id: "test-blue-5", kind: :number, suit: :blue, rank: 5}
+    room = put_player_hands(room, %{host_id => [red_3], player_id => [blue_5]})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, red_3.id)
+
+    assert room.game.current_trick == [%{player_id: host_id, card: red_3}]
+    assert room.game.current_player == player_id
+    assert room.game.hands[host_id] == []
+  end
+
+  test "non-current player cannot play" do
+    {room, _host_id, player_id} = start_playing_game("Wrong Turn")
+    card = hd(room.game.hands[player_id])
+
+    assert {:error, "It is not your turn to play"} =
+             RoomRegistry.play_card(room.code, player_id, card.id)
+  end
+
+  test "player must follow lead suit when able" do
+    {room, host_id, player_id} = start_playing_game("Follow Suit")
+    red_3 = %{id: "test-red-3", kind: :number, suit: :red, rank: 3}
+    red_7 = %{id: "test-red-7", kind: :number, suit: :red, rank: 7}
+    blue_5 = %{id: "test-blue-5", kind: :number, suit: :blue, rank: 5}
+    room = put_player_hands(room, %{host_id => [red_3], player_id => [blue_5, red_7]})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, red_3.id)
+
+    assert {:error, "You must follow the lead suit if able"} =
+             RoomRegistry.play_card(room.code, player_id, blue_5.id)
+
+    {:ok, room} = RoomRegistry.play_card(room.code, player_id, red_7.id)
+
+    assert room.game.completed_tricks == [
+             %{
+               trick: 1,
+               lead_suit: :red,
+               plays: [%{player_id: host_id, card: red_3}, %{player_id: player_id, card: red_7}],
+               winner_id: player_id
+             }
+           ]
+
+    assert room.game.current_player == player_id
+    assert room.game.trick_wins[player_id] == 1
+  end
+
+  test "player may play any card when unable to follow suit" do
+    {room, host_id, player_id} = start_playing_game("Cannot Follow")
+    red_3 = %{id: "test-red-3", kind: :number, suit: :red, rank: 3}
+    blue_5 = %{id: "test-blue-5", kind: :number, suit: :blue, rank: 5}
+    room = put_player_hands(room, %{host_id => [red_3], player_id => [blue_5]})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, red_3.id)
+    assert {:ok, room} = RoomRegistry.play_card(room.code, player_id, blue_5.id)
+    assert room.game.trick_wins[host_id] == 1
+  end
+
   defp start_king_gambler_setup(room_name) do
     host_id = "gambler-host-#{System.unique_integer([:positive])}"
     player_id = "gambler-player-#{System.unique_integer([:positive])}"
@@ -130,6 +189,31 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.points[player_id] == 50
 
     {room, host_id, player_id}
+  end
+
+  defp start_playing_game(room_name) do
+    {room, host_id, player_id} = start_king_gambler_setup(room_name)
+
+    king_discard = room.game.hands[host_id] |> hd()
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, host_id, %{"discard" => king_discard.id})
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, player_id, %{"bid" => "2", "wager" => "20"})
+
+    assert room.game.phase == :playing
+    {room, host_id, player_id}
+  end
+
+  defp put_player_hands(room, hands) do
+    :sys.replace_state(RoomRegistry, fn state ->
+      Enum.reduce(hands, state, fn {player_id, hand}, state ->
+        put_in(state, [:rooms, room.code, :game, :hands, player_id], hand)
+      end)
+    end)
+
+    RoomRegistry.get_room(room.code)
   end
 
   defp put_room_round(room, round) do

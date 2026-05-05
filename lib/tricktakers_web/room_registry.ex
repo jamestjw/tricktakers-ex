@@ -2,6 +2,7 @@ defmodule TricktakersWeb.RoomRegistry do
   use GenServer
 
   alias TricktakersWeb.Game.Deck
+  alias TricktakersWeb.Game.Trick
 
   @topic "rooms"
 
@@ -39,6 +40,10 @@ defmodule TricktakersWeb.RoomRegistry do
 
   def redraw_gambler_hand(code, player_session_id, card_ids) do
     GenServer.call(__MODULE__, {:redraw_gambler_hand, code, player_session_id, card_ids})
+  end
+
+  def play_card(code, player_session_id, card_id) do
+    GenServer.call(__MODULE__, {:play_card, code, player_session_id, card_id})
   end
 
   def player_name(room, player_session_id) do
@@ -148,6 +153,10 @@ defmodule TricktakersWeb.RoomRegistry do
         round: 1,
         trick: 1,
         lead: hd(player_ids),
+        current_player: hd(player_ids),
+        current_trick: [],
+        completed_tricks: [],
+        trick_wins: %{},
         character_order: player_ids,
         points: Map.new(player_ids, &{&1, 30}),
         hands: hands,
@@ -240,7 +249,7 @@ defmodule TricktakersWeb.RoomRegistry do
         game
         |> Map.put(:character_setup_done, setup_done)
         |> Map.put(:current_setup_index, next_setup_index(game, setup_done))
-        |> Map.put(:phase, if(all_setup?, do: :playing, else: :character_setup))
+        |> start_playing_if_ready(all_setup?)
 
       updated_room =
         found_room
@@ -268,6 +277,31 @@ defmodule TricktakersWeb.RoomRegistry do
          {:ok, discard_ids} <- validate_redraw_card_ids(game, valid_session_id, card_ids),
          :ok <- ensure_gambler_redraw_available(game, valid_session_id),
          {:ok, game} <- redraw_hand(game, valid_session_id, discard_ids) do
+      updated_room =
+        found_room
+        |> Map.put(:game, game)
+        |> Map.put(:updated_at, DateTime.utc_now())
+
+      new_state = put_in(state, [:rooms, updated_room.code], updated_room)
+      broadcast_rooms(new_state)
+      broadcast_room(updated_room)
+      {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:play_card, code, player_session_id, card_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_playing_phase(game),
+         :ok <- ensure_current_player(game, valid_session_id),
+         {:ok, card} <- fetch_hand_card(game, valid_session_id, card_id),
+         :ok <- ensure_legal_play(game, valid_session_id, card),
+         {:ok, game} <- play_card_in_game(game, valid_session_id, card) do
       updated_room =
         found_room
         |> Map.put(:game, game)
@@ -369,6 +403,9 @@ defmodule TricktakersWeb.RoomRegistry do
   defp ensure_character_setup_phase(_game),
     do: {:error, "Character setup is not active"}
 
+  defp ensure_playing_phase(%{phase: :playing}), do: :ok
+  defp ensure_playing_phase(_game), do: {:error, "Trick play is not active"}
+
   defp ensure_current_picker(game, player_name) do
     if current_picker(game) == player_name,
       do: :ok,
@@ -379,6 +416,12 @@ defmodule TricktakersWeb.RoomRegistry do
     if current_setup_player(game) == player_name,
       do: :ok,
       else: {:error, "It is not your turn to finish setup"}
+  end
+
+  defp ensure_current_player(game, player_session_id) do
+    if game.current_player == player_session_id,
+      do: :ok,
+      else: {:error, "It is not your turn to play"}
   end
 
   defp ensure_character_available(game, character_id) do
@@ -550,6 +593,84 @@ defmodule TricktakersWeb.RoomRegistry do
         {new_hand ++ [card], discarded_cards, drawn_cards}
       end
     end)
+  end
+
+  defp start_playing_if_ready(game, false), do: Map.put(game, :phase, :character_setup)
+
+  defp start_playing_if_ready(game, true) do
+    lead = game.lead || hd(game.character_order)
+
+    game
+    |> Map.put(:phase, :playing)
+    |> Map.put(:current_player, lead)
+    |> Map.put(:current_trick, [])
+  end
+
+  defp fetch_hand_card(game, player_session_id, card_id) do
+    game
+    |> get_in([:hands, player_session_id])
+    |> Kernel.||([])
+    |> Enum.find(&(&1.id == card_id))
+    |> case do
+      nil -> {:error, "Choose a card from your hand"}
+      card -> {:ok, card}
+    end
+  end
+
+  defp ensure_legal_play(game, player_session_id, card) do
+    hand = get_in(game, [:hands, player_session_id]) || []
+
+    if Trick.legal_card?(hand, card, game.current_trick || []),
+      do: :ok,
+      else: {:error, "You must follow the lead suit if able"}
+  end
+
+  defp play_card_in_game(game, player_session_id, card) do
+    hand = get_in(game, [:hands, player_session_id]) || []
+    hand = Enum.reject(hand, &(&1.id == card.id))
+    current_trick = (game.current_trick || []) ++ [%{player_id: player_session_id, card: card}]
+
+    game =
+      game
+      |> put_in([:hands, player_session_id], hand)
+      |> Map.put(:current_trick, current_trick)
+
+    {:ok, advance_trick_if_complete(game)}
+  end
+
+  defp advance_trick_if_complete(game) do
+    if length(game.current_trick) == length(game.character_order) do
+      winner_id = Trick.winning_play(game.current_trick).player_id
+
+      completed_trick = %{
+        trick: game.trick,
+        lead_suit: Trick.lead_suit(game.current_trick),
+        plays: game.current_trick,
+        winner_id: winner_id
+      }
+
+      game
+      |> Map.put(:completed_tricks, Map.get(game, :completed_tricks, []) ++ [completed_trick])
+      |> Map.put(
+        :trick_wins,
+        Map.update(Map.get(game, :trick_wins, %{}), winner_id, 1, &(&1 + 1))
+      )
+      |> Map.put(
+        :discards,
+        Map.get(game, :discards, []) ++ Enum.map(game.current_trick, & &1.card)
+      )
+      |> Map.put(:current_trick, [])
+      |> Map.put(:lead, winner_id)
+      |> Map.put(:current_player, winner_id)
+      |> Map.update!(:trick, &(&1 + 1))
+    else
+      Map.put(game, :current_player, next_player_after(game.character_order, game.current_player))
+    end
+  end
+
+  defp next_player_after(player_ids, player_id) do
+    index = Enum.find_index(player_ids, &(&1 == player_id)) || 0
+    Enum.at(player_ids, rem(index + 1, length(player_ids)))
   end
 
   defp next_picker_index(game, picks) do

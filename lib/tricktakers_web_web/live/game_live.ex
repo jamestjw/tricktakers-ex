@@ -2,6 +2,7 @@ defmodule TricktakersWebWeb.GameLive do
   use TricktakersWebWeb, :live_view
 
   alias TricktakersWeb.Game.SetupState
+  alias TricktakersWeb.Game.Trick
   alias TricktakersWeb.RoomRegistry
 
   @impl true
@@ -131,6 +132,20 @@ defmodule TricktakersWebWeb.GameLive do
     end
   end
 
+  def handle_event("play_card", %{"card" => card_id}, socket) do
+    case RoomRegistry.play_card(
+           socket.assigns.room.code,
+           socket.assigns.player_session_id,
+           card_id
+         ) do
+      {:ok, room} ->
+        {:noreply, assign(socket, room: room, setup_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -173,7 +188,11 @@ defmodule TricktakersWebWeb.GameLive do
                     setup_error={@setup_error}
                   />
                 <% _phase -> %>
-                  <.active_table room={@room} player_session_id={@player_session_id} />
+                  <.active_table
+                    room={@room}
+                    player_session_id={@player_session_id}
+                    play_error={@setup_error}
+                  />
               <% end %>
             <% end %>
           <% end %>
@@ -658,11 +677,12 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
+  attr :play_error, :string, default: nil
 
   defp active_table(assigns) do
     assigns =
       assigns
-      |> assign(:table, table_state(assigns.room, assigns.player_session_id))
+      |> assign(:table, table_state(assigns.room, assigns.player_session_id, assigns.play_error))
 
     ~H"""
     <section id="active-game-table" class="game-table-shell">
@@ -703,7 +723,7 @@ defmodule TricktakersWebWeb.GameLive do
         <section class="game-center-stage" aria-label="Current trick">
           <div class="game-trick-meta">
             <span class="row gap-2">
-              <span class="game-lead-dot red"></span> {@table.lead_color} led
+              <span class={["game-lead-dot", lead_dot_class(@table.lead_suit)]}></span> {@table.lead_label} led
             </span>
             <span class="muted">·</span>
             <span class="muted">Must follow if able</span>
@@ -715,14 +735,16 @@ defmodule TricktakersWebWeb.GameLive do
                 <.playing_card card={play.card} />
               </div>
             <% end %>
-            <div class="game-trick-slot" style="transform: translate(140px, -20px) rotate(8deg);">
-              {String.upcase(@table.waiting_for)}
-            </div>
+            <%= if @table.waiting_for do %>
+              <div class="game-trick-slot" style="transform: translate(140px, -20px) rotate(8deg);">
+                {String.upcase(@table.waiting_for)}
+              </div>
+            <% end %>
           </div>
 
           <div class="row gap-3 center-x game-declare-row">
             <button class="btn gold sm" disabled>Declare Kakumei</button>
-            <span class="muted body-sm">{@table.waiting_for} is thinking...</span>
+            <span class="muted body-sm">{@table.turn_copy}</span>
           </div>
         </section>
 
@@ -743,6 +765,8 @@ defmodule TricktakersWebWeb.GameLive do
                     card[:disabled] && "disabled"
                   ]}
                   style={hand_card_style(index, length(@table.hand))}
+                  phx-click="play_card"
+                  phx-value-card={card.id}
                   disabled={card[:disabled]}
                   aria-label={card_label(card)}
                 >
@@ -751,10 +775,9 @@ defmodule TricktakersWebWeb.GameLive do
               <% end %>
             </div>
 
-            <div class="row gap-3 center-x">
-              <button class="btn ghost sm" type="button">Cancel</button>
-              <button class="btn" type="button">Play card</button>
-            </div>
+            <%= if @table.play_error do %>
+              <p class="body-sm game-selection-error">{@table.play_error}</p>
+            <% end %>
           </div>
 
           <aside class="game-turn-panel">
@@ -762,7 +785,7 @@ defmodule TricktakersWebWeb.GameLive do
               <div class="game-timer">18</div>
               <div class="game-turn-copy">
                 <div class="eyebrow">Your turn</div>
-                <div class="body-sm muted">Pick any Red, or override.</div>
+                <div class="body-sm muted">{@table.hand_prompt}</div>
               </div>
             </div>
             <div class="row gap-2 game-stat-pills">
@@ -876,36 +899,75 @@ defmodule TricktakersWebWeb.GameLive do
     """
   end
 
-  defp table_state(room, player_session_id) do
-    players = seat_players(room.players, player_session_id, room.game.character_picks || %{})
+  defp table_state(room, player_session_id, play_error) do
+    game = room.game
+    players = seat_players(room.players, player_session_id, game.character_picks || %{})
     you = Enum.find(players, &(&1.id == player_session_id)) || hd(players)
 
     opponents = Enum.reject(players, &(&1.name == you.name))
+    current_player = Enum.find(players, &(&1.id == game.current_player)) || you
+    lead_suit = Trick.lead_suit(game.current_trick || [])
+    legal_card_ids = legal_card_ids(game, player_session_id)
+    your_turn? = game.current_player == player_session_id
 
     %{
-      round: (room.game && room.game.round) || 1,
-      trick: max((room.game && room.game.trick) || 1, 3),
+      round: game.round,
+      trick: game.trick,
       total_tricks: 5,
-      lead_color: "Red",
-      active_player: List.first(opponents, you).name,
-      waiting_for: (Enum.at(opponents, 1) || you).name,
+      lead_suit: lead_suit,
+      lead_label: lead_label(lead_suit),
+      active_player: current_player.name,
+      waiting_for: current_player.name,
+      turn_copy:
+        if(your_turn?, do: "Your turn to play.", else: "#{current_player.name} is thinking..."),
+      hand_prompt: hand_prompt(your_turn?, lead_suit),
+      play_error: play_error,
       you: you,
       opponents: opponents,
-      current_trick: [
-        %{
-          player: List.first(opponents, you).name,
-          card: %{id: "preview-red-5", kind: :number, suit: :red, rank: 5},
-          style: "transform: translate(-130px, -10px) rotate(-6deg);"
-        },
-        %{
-          player: (Enum.at(opponents, 2) || you).name,
-          card: %{id: "preview-red-2", kind: :number, suit: :red, rank: 2},
-          style: "transform: translate(0, -30px) rotate(4deg);"
-        }
-      ],
-      hand: hand_for(room, player_session_id)
+      current_trick: current_trick_state(game.current_trick || []),
+      hand:
+        room
+        |> hand_for(player_session_id)
+        |> Enum.map(fn card ->
+          Map.put(card, :disabled, not your_turn? or card.id not in legal_card_ids)
+        end)
     }
   end
+
+  defp legal_card_ids(game, player_session_id) do
+    hand = get_in(game, [:hands, player_session_id]) || []
+
+    if game.current_player == player_session_id do
+      Trick.legal_cards(hand, game.current_trick || [])
+      |> Enum.map(& &1.id)
+    else
+      []
+    end
+  end
+
+  defp current_trick_state(plays) do
+    plays
+    |> Enum.with_index()
+    |> Enum.map(fn {play, index} ->
+      %{card: play.card, player_id: play.player_id, style: trick_card_style(index)}
+    end)
+  end
+
+  defp trick_card_style(0), do: "transform: translate(-130px, -10px) rotate(-6deg);"
+  defp trick_card_style(1), do: "transform: translate(0, -30px) rotate(4deg);"
+  defp trick_card_style(2), do: "transform: translate(130px, -10px) rotate(8deg);"
+  defp trick_card_style(3), do: "transform: translate(-50px, 70px) rotate(-3deg);"
+  defp trick_card_style(_index), do: "transform: translate(70px, 70px) rotate(5deg);"
+
+  defp lead_label(nil), do: "No suit"
+  defp lead_label(suit), do: suit |> Atom.to_string() |> String.capitalize()
+
+  defp lead_dot_class(:red), do: "red"
+  defp lead_dot_class(_suit), do: nil
+
+  defp hand_prompt(false, _lead_suit), do: "Waiting for your turn."
+  defp hand_prompt(true, nil), do: "Lead any card."
+  defp hand_prompt(true, suit), do: "Follow #{lead_label(suit)} if able."
 
   defp seat_players(players, _player_session_id, character_picks) do
     roster = fallback_roster()
