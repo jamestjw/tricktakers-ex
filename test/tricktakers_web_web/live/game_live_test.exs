@@ -194,4 +194,43 @@ defmodule TricktakersWebWeb.GameLiveTest do
     assert room.game.lead == host_id
     assert room.game.current_player == host_id
   end
+
+  test "only resistance player sees kakumei action", %{conn: conn} do
+    resistance_id = "ui-resistance-#{System.unique_integer([:positive])}"
+    player_id = "ui-king-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "Resistance",
+          "room_name" => "Kakumei UI",
+          "max_players" => "2",
+          "mode" => "Basic"
+        },
+        resistance_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, player_id, "King")
+    {:ok, room} = RoomRegistry.start_game(room.code, resistance_id)
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :phase], :playing)
+      |> put_in([:rooms, room.code, :game, :character_picks], %{
+        resistance_id => "resistance",
+        player_id => "king"
+      })
+      |> put_in([:rooms, room.code, :game, :current_player], resistance_id)
+      |> put_in([:rooms, room.code, :game, :lead], resistance_id)
+    end)
+
+    resistance_conn = Plug.Test.init_test_session(conn, %{"player_session_id" => resistance_id})
+    {:ok, _view, resistance_html} = live(resistance_conn, ~p"/games/#{room.code}")
+
+    king_conn = Plug.Test.init_test_session(conn, %{"player_session_id" => player_id})
+    {:ok, _view, king_html} = live(king_conn, ~p"/games/#{room.code}")
+
+    assert resistance_html =~ "declare-kakumei"
+    refute king_html =~ "declare-kakumei"
+  end
 end

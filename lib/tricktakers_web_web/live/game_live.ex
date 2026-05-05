@@ -146,6 +146,16 @@ defmodule TricktakersWebWeb.GameLive do
     end
   end
 
+  def handle_event("declare_kakumei", _params, socket) do
+    case RoomRegistry.declare_kakumei(socket.assigns.room.code, socket.assigns.player_session_id) do
+      {:ok, room} ->
+        {:noreply, assign(socket, room: room, setup_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
   def handle_event("continue_next_round", _params, socket) do
     case RoomRegistry.continue_next_round(
            socket.assigns.room.code,
@@ -964,7 +974,21 @@ defmodule TricktakersWebWeb.GameLive do
           </div>
 
           <div class="row gap-3 center-x game-declare-row">
-            <button class="btn gold sm" disabled>Declare Kakumei</button>
+            <%= if @table.show_kakumei_button? do %>
+              <button
+                id="declare-kakumei"
+                type="button"
+                class="btn gold sm"
+                phx-click="declare_kakumei"
+                disabled={!@table.can_declare_kakumei?}
+              >
+                <%= if @table.revolt_active? do %>
+                  Revolt active
+                <% else %>
+                  Declare Kakumei
+                <% end %>
+              </button>
+            <% end %>
             <span class="muted body-sm">{@table.turn_copy}</span>
           </div>
         </section>
@@ -1130,6 +1154,8 @@ defmodule TricktakersWebWeb.GameLive do
     lead_suit = Trick.lead_suit(game.current_trick || [])
     legal_card_ids = legal_card_ids(game, player_session_id)
     your_turn? = game.current_player == player_session_id
+    resistance? = Map.get(game.character_picks || %{}, player_session_id) == "resistance"
+    revolt_active? = get_in(game, [:revolt, :active_trick]) == game.trick
 
     %{
       round: game.round,
@@ -1142,6 +1168,9 @@ defmodule TricktakersWebWeb.GameLive do
       waiting_for: current_player.name,
       turn_copy:
         if(your_turn?, do: "Your turn to play.", else: "#{current_player.name} is thinking..."),
+      show_kakumei_button?: resistance?,
+      can_declare_kakumei?: can_declare_kakumei?(game, player_session_id),
+      revolt_active?: revolt_active?,
       hand_prompt: hand_prompt(your_turn?, lead_suit),
       play_error: play_error,
       you: you,
@@ -1154,6 +1183,16 @@ defmodule TricktakersWebWeb.GameLive do
           Map.put(card, :disabled, not your_turn? or card.id not in legal_card_ids)
         end)
     }
+  end
+
+  defp can_declare_kakumei?(game, player_session_id) do
+    used_player_ids = get_in(game, [:revolt, :used_player_ids]) || []
+    already_played? = Enum.any?(game.current_trick || [], &(&1.player_id == player_session_id))
+
+    Map.get(game.character_picks || %{}, player_session_id) == "resistance" and
+      player_session_id not in used_player_ids and
+      get_in(game, [:revolt, :active_trick]) != game.trick and
+      (game.current_player == player_session_id or already_played?)
   end
 
   defp round_summary_state(room, player_session_id) do

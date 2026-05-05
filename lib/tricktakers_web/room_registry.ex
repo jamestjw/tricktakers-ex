@@ -47,6 +47,10 @@ defmodule TricktakersWeb.RoomRegistry do
     GenServer.call(__MODULE__, {:play_card, code, player_session_id, card_id})
   end
 
+  def declare_kakumei(code, player_session_id) do
+    GenServer.call(__MODULE__, {:declare_kakumei, code, player_session_id})
+  end
+
   def continue_next_round(code, player_session_id) do
     GenServer.call(__MODULE__, {:continue_next_round, code, player_session_id})
   end
@@ -173,6 +177,7 @@ defmodule TricktakersWeb.RoomRegistry do
         hands: hands,
         draw_pile: draw_pile,
         discards: [],
+        revolt: %{used_player_ids: [], active_trick: nil, declared_by: nil},
         gambler_redraws: %{},
         character_picks: %{},
         current_picker_index: 0,
@@ -313,6 +318,32 @@ defmodule TricktakersWeb.RoomRegistry do
          {:ok, card} <- fetch_hand_card(game, valid_session_id, card_id),
          :ok <- ensure_legal_play(game, valid_session_id, card),
          {:ok, game} <- play_card_in_game(game, valid_session_id, card, max_rounds(found_room)) do
+      updated_room =
+        found_room
+        |> Map.put(:game, game)
+        |> Map.put(:updated_at, DateTime.utc_now())
+
+      new_state = put_in(state, [:rooms, updated_room.code], updated_room)
+      broadcast_rooms(new_state)
+      broadcast_room(updated_room)
+      {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:declare_kakumei, code, player_session_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_playing_phase(game),
+         :ok <- ensure_resistance_player(game, valid_session_id),
+         :ok <- ensure_kakumei_available(game, valid_session_id),
+         :ok <- ensure_can_mark_current_trick(game, valid_session_id) do
+      game = mark_kakumei(game, valid_session_id)
+
       updated_room =
         found_room
         |> Map.put(:game, game)
@@ -526,6 +557,35 @@ defmodule TricktakersWeb.RoomRegistry do
       else: {:error, "It is not your turn to play"}
   end
 
+  defp ensure_resistance_player(game, player_session_id) do
+    if Map.get(game.character_picks || %{}, player_session_id) == "resistance",
+      do: :ok,
+      else: {:error, "Only the Resistance can declare Kakumei"}
+  end
+
+  defp ensure_kakumei_available(game, player_session_id) do
+    used_player_ids = get_in(game, [:revolt, :used_player_ids]) || []
+
+    cond do
+      player_session_id in used_player_ids ->
+        {:error, "Kakumei has already been declared this round"}
+
+      revolt_active?(game) ->
+        {:error, "This trick is already a Revolt trick"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp ensure_can_mark_current_trick(game, player_session_id) do
+    already_played? = Enum.any?(game.current_trick || [], &(&1.player_id == player_session_id))
+
+    if game.current_player == player_session_id or already_played?,
+      do: :ok,
+      else: {:error, "Declare Kakumei before or while playing your card"}
+  end
+
   defp ensure_character_available(game, character_id) do
     if character_id in Map.values(game.character_picks),
       do: {:error, "Character has already been chosen"},
@@ -732,6 +792,7 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:hands, hands)
       |> Map.put(:draw_pile, draw_pile)
       |> Map.put(:discards, [])
+      |> Map.put(:revolt, %{used_player_ids: [], active_trick: nil, declared_by: nil})
       |> Map.put(:gambler_redraws, %{})
       |> Map.put(:character_picks, %{})
       |> Map.put(:current_picker_index, 0)
@@ -780,13 +841,16 @@ defmodule TricktakersWeb.RoomRegistry do
 
   defp advance_trick_if_complete(game, max_rounds) do
     if length(game.current_trick) == length(game.character_order) do
-      winner_id = Trick.winning_play(game.current_trick).player_id
+      revolt? = revolt_active?(game)
+      winner_id = Trick.winning_play(game.current_trick, revolt?: revolt?).player_id
 
       completed_trick = %{
         trick: game.trick,
         lead_suit: Trick.lead_suit(game.current_trick),
         plays: game.current_trick,
-        winner_id: winner_id
+        winner_id: winner_id,
+        revolt?: revolt?,
+        revolt_player_id: get_in(game, [:revolt, :declared_by])
       }
 
       game =
@@ -801,6 +865,7 @@ defmodule TricktakersWeb.RoomRegistry do
           Map.get(game, :discards, []) ++ Enum.map(game.current_trick, & &1.card)
         )
         |> Map.put(:current_trick, [])
+        |> clear_active_revolt()
         |> Map.put(:lead, winner_id)
         |> Map.put(:current_player, winner_id)
 
@@ -839,6 +904,26 @@ defmodule TricktakersWeb.RoomRegistry do
     {before, after_and_player} = Enum.split(player_ids, index)
     after_and_player ++ before
   end
+
+  defp mark_kakumei(game, player_session_id) do
+    revolt = Map.get(game, :revolt, %{used_player_ids: [], active_trick: nil, declared_by: nil})
+    used_player_ids = Enum.uniq([player_session_id | Map.get(revolt, :used_player_ids, [])])
+
+    Map.put(game, :revolt, %{
+      used_player_ids: used_player_ids,
+      active_trick: game.trick,
+      declared_by: player_session_id
+    })
+  end
+
+  defp clear_active_revolt(game) do
+    update_in(game, [:revolt], fn
+      nil -> %{used_player_ids: [], active_trick: nil, declared_by: nil}
+      revolt -> %{revolt | active_trick: nil, declared_by: nil}
+    end)
+  end
+
+  defp revolt_active?(game), do: get_in(game, [:revolt, :active_trick]) == game.trick
 
   defp point_winner_id(%{round: round} = game, result, max_rounds) when round == max_rounds do
     if result.character_winner_id || result.crown_winner_id do

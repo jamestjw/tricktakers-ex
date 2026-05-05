@@ -142,14 +142,16 @@ defmodule TricktakersWeb.RoomRegistryTest do
 
     {:ok, room} = RoomRegistry.play_card(room.code, player_id, red_7.id)
 
-    assert room.game.completed_tricks == [
-             %{
-               trick: 1,
-               lead_suit: :red,
-               plays: [%{player_id: host_id, card: red_3}, %{player_id: player_id, card: red_7}],
-               winner_id: player_id
-             }
+    assert [completed_trick] = room.game.completed_tricks
+    assert completed_trick.trick == 1
+    assert completed_trick.lead_suit == :red
+
+    assert completed_trick.plays == [
+             %{player_id: host_id, card: red_3},
+             %{player_id: player_id, card: red_7}
            ]
+
+    assert completed_trick.winner_id == player_id
 
     assert room.game.current_player == player_id
     assert room.game.trick_wins[player_id] == 1
@@ -176,14 +178,16 @@ defmodule TricktakersWeb.RoomRegistryTest do
     {:ok, room} = RoomRegistry.play_card(room.code, host_id, red_3.id)
     assert {:ok, room} = RoomRegistry.play_card(room.code, player_id, rare.id)
 
-    assert room.game.completed_tricks == [
-             %{
-               trick: 1,
-               lead_suit: :red,
-               plays: [%{player_id: host_id, card: red_3}, %{player_id: player_id, card: rare}],
-               winner_id: player_id
-             }
+    assert [completed_trick] = room.game.completed_tricks
+    assert completed_trick.trick == 1
+    assert completed_trick.lead_suit == :red
+
+    assert completed_trick.plays == [
+             %{player_id: host_id, card: red_3},
+             %{player_id: player_id, card: rare}
            ]
+
+    assert completed_trick.winner_id == player_id
 
     white_flag = %{id: "test-white-flag", kind: :white_flag}
     black_9 = %{id: "test-black-9", kind: :number, suit: :black, rank: 9}
@@ -206,6 +210,34 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert {:ok, room} = RoomRegistry.play_card(room.code, player_id, blue_5.id)
 
     assert [%{lead_suit: :blue, winner_id: ^host_id}] = room.game.completed_tricks
+  end
+
+  test "resistance can declare kakumei once and revolt makes lowest non-black card win" do
+    {room, resistance_id, player_id} = start_resistance_playing_game("Kakumei")
+    red_9 = %{id: "revolt-red-9", kind: :number, suit: :red, rank: 9}
+    black_1 = %{id: "revolt-black-1", kind: :number, suit: :black, rank: 1}
+    room = put_player_hands(room, %{resistance_id => [red_9], player_id => [black_1]})
+
+    {:ok, room} = RoomRegistry.declare_kakumei(room.code, resistance_id)
+    assert room.game.revolt.active_trick == 1
+
+    {:ok, room} = RoomRegistry.play_card(room.code, resistance_id, red_9.id)
+    {:ok, room} = RoomRegistry.play_card(room.code, player_id, black_1.id)
+
+    assert [%{revolt?: true, revolt_player_id: ^resistance_id, winner_id: ^resistance_id}] =
+             room.game.completed_tricks
+
+    assert room.game.revolt.active_trick == nil
+
+    assert {:error, "Kakumei has already been declared this round"} =
+             RoomRegistry.declare_kakumei(room.code, resistance_id)
+  end
+
+  test "only resistance can declare kakumei" do
+    {room, _resistance_id, player_id} = start_resistance_playing_game("Only Resistance")
+
+    assert {:error, "Only the Resistance can declare Kakumei"} =
+             RoomRegistry.declare_kakumei(room.code, player_id)
   end
 
   test "continuing a completed round preserves scores and starts next character selection" do
@@ -320,6 +352,38 @@ defmodule TricktakersWeb.RoomRegistryTest do
 
     assert room.game.phase == :playing
     {room, host_id, player_id}
+  end
+
+  defp start_resistance_playing_game(room_name) do
+    resistance_id = "resistance-host-#{System.unique_integer([:positive])}"
+    player_id = "resistance-player-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "Resistance",
+          "room_name" => room_name,
+          "max_players" => "2",
+          "mode" => "Basic"
+        },
+        resistance_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, player_id, "King")
+    {:ok, room} = RoomRegistry.start_game(room.code, resistance_id)
+    {:ok, room} = RoomRegistry.choose_character(room.code, resistance_id, "resistance")
+    {:ok, room} = RoomRegistry.choose_character(room.code, player_id, "king")
+
+    king_discard = room.game.hands[player_id] |> hd()
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, player_id, %{"discard" => king_discard.id})
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, resistance_id, %{"notes" => "auto"})
+
+    assert room.game.phase == :playing
+    {room, resistance_id, player_id}
   end
 
   defp put_player_hands(room, hands) do

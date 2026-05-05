@@ -85,8 +85,8 @@ defmodule TricktakersWeb.Game.Round do
   @spec black_crown_winner_ids(map()) :: [String.t()]
   def black_crown_winner_ids(game) do
     game.character_picks
-    |> Enum.filter(fn {player_id, _character_id} ->
-      Map.get(game.trick_wins || %{}, player_id, 0) == 0
+    |> Enum.filter(fn {player_id, character_id} ->
+      black_crown_eligible?(game, player_id, character_id)
     end)
     |> Enum.sort_by(fn {_player_id, character_id} -> character_priority_rank(character_id) end)
     |> Enum.take(2)
@@ -105,6 +105,19 @@ defmodule TricktakersWeb.Game.Round do
 
   defp character_win?(game, player_id, "berserker") do
     game.round == 3 and trick_wins(game, player_id) == 0
+  end
+
+  defp character_win?(game, player_id, "resistance") do
+    case revolt_trick_won_by(game, player_id) do
+      %{plays: plays} ->
+        case winning_card_for(plays, player_id) do
+          %{kind: :number, suit: :black} -> true
+          _card -> false
+        end
+
+      nil ->
+        false
+    end
   end
 
   defp character_win?(_game, _player_id, _character_id), do: false
@@ -131,7 +144,9 @@ defmodule TricktakersWeb.Game.Round do
     end
   end
 
-  defp score_player(game, player_id, "resistance"), do: trick_wins(game, player_id) * 30
+  defp score_player(game, player_id, "resistance") do
+    trick_wins(game, player_id) * 30 + resistance_revolt_bonus(game, player_id)
+  end
 
   defp score_player(game, player_id, "hermit") do
     %{0 => 50, 1 => -10, 2 => -30, 3 => 70, 4 => 100} |> Map.get(trick_wins(game, player_id), 0)
@@ -152,6 +167,54 @@ defmodule TricktakersWeb.Game.Round do
   end
 
   defp zero_points(game), do: game.character_picks |> Map.keys() |> Map.new(&{&1, 0})
+
+  defp black_crown_eligible?(game, player_id, "resistance") do
+    Map.get(game.trick_wins || %{}, player_id, 0) == 0 or
+      resistance_only_won_revolt?(game, player_id)
+  end
+
+  defp black_crown_eligible?(game, player_id, _character_id),
+    do: Map.get(game.trick_wins || %{}, player_id, 0) == 0
+
+  defp resistance_only_won_revolt?(game, player_id) do
+    Map.get(game.trick_wins || %{}, player_id, 0) == 1 and
+      not is_nil(revolt_trick_won_by(game, player_id))
+  end
+
+  defp resistance_revolt_bonus(game, player_id) do
+    case revolt_trick_won_by(game, player_id) do
+      %{plays: plays} ->
+        plays
+        |> winning_card_for(player_id)
+        |> revolt_bonus_for_card()
+
+      nil ->
+        0
+    end
+  end
+
+  defp revolt_bonus_for_card(%{kind: :white_flag}), do: 30
+  defp revolt_bonus_for_card(%{kind: :number, rank: rank}) when rank in 1..3, do: 50
+  defp revolt_bonus_for_card(%{kind: :number, rank: rank}) when rank in 4..6, do: 80
+  defp revolt_bonus_for_card(%{kind: :number, rank: rank}) when rank in 7..9, do: 100
+  defp revolt_bonus_for_card(_card), do: 0
+
+  defp revolt_trick_won_by(game, player_id) do
+    game
+    |> Map.get(:completed_tricks, [])
+    |> Enum.find(fn trick ->
+      Map.get(trick, :revolt?, false) and trick.winner_id == player_id
+    end)
+  end
+
+  defp winning_card_for(plays, player_id) do
+    plays
+    |> Enum.find(&(&1.player_id == player_id))
+    |> case do
+      nil -> nil
+      play -> play.card
+    end
+  end
 
   defp apply_points(points_before, points_delta) do
     Map.new(points_before, fn {player_id, points} ->

@@ -84,6 +84,65 @@ defmodule TricktakersWeb.Game.RoundTest do
     assert result.points_delta["resistance"] == 90
   end
 
+  test "resistance scores revolt bonus when winning the revolt trick" do
+    game =
+      game(%{resistance: 1, king: 4})
+      |> Map.put(:completed_tricks, [
+        %{
+          trick: 1,
+          revolt?: true,
+          winner_id: "resistance",
+          plays: [
+            %{player_id: "resistance", card: %{id: "white-flag", kind: :white_flag}},
+            %{player_id: "king", card: %{id: "red-9", kind: :number, suit: :red, rank: 9}}
+          ]
+        }
+      ])
+
+    result = Round.resolve(game)
+
+    assert result.points_delta["resistance"] == 60
+  end
+
+  test "resistance wins immediately by winning revolt with black" do
+    game =
+      game(%{resistance: 1, king: 4})
+      |> Map.put(:completed_tricks, [
+        %{
+          trick: 1,
+          revolt?: true,
+          winner_id: "resistance",
+          plays: [
+            %{
+              player_id: "resistance",
+              card: %{id: "black-1", kind: :number, suit: :black, rank: 1}
+            },
+            %{player_id: "king", card: %{id: "rare", kind: :rare}}
+          ]
+        }
+      ])
+
+    assert Round.character_winner_id(game) == "resistance"
+  end
+
+  test "resistance is black-crown eligible when only win was the revolt trick" do
+    game =
+      game(%{resistance: 1, king: 4, gambler: 0})
+      |> Map.put(:completed_tricks, [
+        %{
+          trick: 1,
+          revolt?: true,
+          winner_id: "resistance",
+          plays: [
+            %{player_id: "resistance", card: %{id: "white-flag", kind: :white_flag}},
+            %{player_id: "king", card: %{id: "red-9", kind: :number, suit: :red, rank: 9}}
+          ]
+        }
+      ])
+
+    assert Round.black_crown_winner_ids(game) == ["gambler", "resistance"]
+  end
+
   test "next lead goes to fewest points among players with no gold crown, priority breaking ties" do
     result =
       Round.resolve(
