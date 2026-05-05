@@ -208,6 +208,54 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert [%{lead_suit: :blue, winner_id: ^host_id}] = room.game.completed_tricks
   end
 
+  test "continuing a completed round preserves scores and starts next character selection" do
+    {room, host_id, player_id} = start_playing_game("Continue Round")
+    room = put_round_complete(room, player_id)
+
+    {:ok, room} = RoomRegistry.continue_next_round(room.code, host_id)
+
+    assert room.game.phase == :character_selection
+    assert room.game.round == 2
+    assert room.game.points == %{host_id => 80, player_id => 40}
+
+    assert room.game.crowns == %{
+             host_id => %{gold: 1, black: 0},
+             player_id => %{gold: 0, black: 1}
+           }
+
+    assert room.game.lead_player_token_id == player_id
+    assert room.game.character_order == [player_id, host_id]
+    assert room.game.character_picks == %{}
+    assert room.game.completed_tricks == []
+    assert map_size(room.game.hands) == 2
+  end
+
+  test "lead token holder chooses first trick leader after round setup" do
+    {room, host_id, player_id} = start_playing_game("First Lead Choice")
+    room = put_round_complete(room, player_id)
+
+    {:ok, room} = RoomRegistry.continue_next_round(room.code, host_id)
+    {:ok, room} = RoomRegistry.choose_character(room.code, player_id, "hermit")
+    {:ok, room} = RoomRegistry.choose_character(room.code, host_id, "berserker")
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, player_id, %{"notes" => "auto"})
+
+    {:ok, room} = RoomRegistry.complete_character_setup(room.code, host_id, %{"notes" => "auto"})
+
+    assert room.game.phase == :choosing_first_lead
+
+    assert {:error, "Only the lead player token holder can choose the first lead"} =
+             RoomRegistry.choose_first_lead(room.code, host_id, host_id)
+
+    {:ok, room} = RoomRegistry.choose_first_lead(room.code, player_id, host_id)
+
+    assert room.game.phase == :playing
+    assert room.game.lead == host_id
+    assert room.game.current_player == host_id
+    assert room.game.trick == 1
+  end
+
   defp start_king_gambler_setup(room_name) do
     host_id = "gambler-host-#{System.unique_integer([:positive])}"
     player_id = "gambler-player-#{System.unique_integer([:positive])}"
@@ -261,6 +309,36 @@ defmodule TricktakersWeb.RoomRegistryTest do
   defp put_room_round(room, round) do
     :sys.replace_state(RoomRegistry, fn state ->
       put_in(state, [:rooms, room.code, :game, :round], round)
+    end)
+
+    RoomRegistry.get_room(room.code)
+  end
+
+  defp put_round_complete(room, next_lead_player_id) do
+    [host_id, player_id] = Enum.map(room.players, & &1.id)
+
+    round_result = %{
+      character_winner_id: nil,
+      gold_crown_winner_id: host_id,
+      black_crown_winner_ids: [player_id],
+      crown_winner_id: nil,
+      crowns: %{host_id => %{gold: 1, black: 0}, player_id => %{gold: 0, black: 1}},
+      points_before: %{host_id => 30, player_id => 50},
+      points_delta: %{host_id => 50, player_id => -10},
+      points_after: %{host_id => 80, player_id => 40},
+      next_lead_player_id: next_lead_player_id
+    }
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :phase], :round_complete)
+      |> put_in([:rooms, room.code, :game, :round_result], round_result)
+      |> put_in([:rooms, room.code, :game, :crowns], round_result.crowns)
+      |> put_in([:rooms, room.code, :game, :points], round_result.points_after)
+      |> put_in([:rooms, room.code, :game, :next_lead_player_id], next_lead_player_id)
+      |> put_in([:rooms, room.code, :game, :lead_player_token_id], next_lead_player_id)
+      |> put_in([:rooms, room.code, :game, :winner_id], nil)
+      |> put_in([:rooms, room.code, :game, :win_reason], nil)
     end)
 
     RoomRegistry.get_room(room.code)

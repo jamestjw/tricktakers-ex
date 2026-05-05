@@ -89,6 +89,54 @@ defmodule TricktakersWebWeb.GameLiveTest do
     assert html =~ "+50 pts"
     assert html =~ "Gold crown"
     assert html =~ "Black crowns"
-    assert html =~ "Gambler leads the next round."
+    assert html =~ "Gambler gets the lead player token."
+    assert html =~ "Continue to round 2"
+  end
+
+  test "lead token holder chooses first trick lead after setup", %{conn: conn} do
+    host_id = "lead-host-#{System.unique_integer([:positive])}"
+    player_id = "lead-player-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "King",
+          "room_name" => "Lead Choice",
+          "max_players" => "2",
+          "mode" => "Basic"
+        },
+        host_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, player_id, "Gambler")
+    {:ok, room} = RoomRegistry.start_game(room.code, host_id)
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :phase], :choosing_first_lead)
+      |> put_in([:rooms, room.code, :game, :round], 2)
+      |> put_in([:rooms, room.code, :game, :lead_player_token_id], player_id)
+      |> put_in([:rooms, room.code, :game, :character_picks], %{
+        host_id => "king",
+        player_id => "gambler"
+      })
+    end)
+
+    conn = Plug.Test.init_test_session(conn, %{"player_session_id" => player_id})
+
+    {:ok, view, html} = live(conn, ~p"/games/#{room.code}")
+
+    assert html =~ "Choose the first lead."
+    assert html =~ "Gambler holds the token"
+
+    view
+    |> element("#choose-first-lead-#{host_id}")
+    |> render_click()
+
+    room = RoomRegistry.get_room(room.code)
+
+    assert room.game.phase == :playing
+    assert room.game.lead == host_id
+    assert room.game.current_player == host_id
   end
 end

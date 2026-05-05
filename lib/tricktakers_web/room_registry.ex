@@ -47,6 +47,14 @@ defmodule TricktakersWeb.RoomRegistry do
     GenServer.call(__MODULE__, {:play_card, code, player_session_id, card_id})
   end
 
+  def continue_next_round(code, player_session_id) do
+    GenServer.call(__MODULE__, {:continue_next_round, code, player_session_id})
+  end
+
+  def choose_first_lead(code, player_session_id, chosen_player_id) do
+    GenServer.call(__MODULE__, {:choose_first_lead, code, player_session_id, chosen_player_id})
+  end
+
   def player_name(room, player_session_id) do
     room
     |> player_for_session(player_session_id)
@@ -159,6 +167,7 @@ defmodule TricktakersWeb.RoomRegistry do
         completed_tricks: [],
         trick_wins: %{},
         crowns: Map.new(player_ids, &{&1, %{gold: 0, black: 0}}),
+        lead_player_token_id: hd(player_ids),
         character_order: player_ids,
         points: Map.new(player_ids, &{&1, 30}),
         hands: hands,
@@ -318,6 +327,62 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
+  def handle_call({:continue_next_round, code, player_session_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_round_complete_phase(game),
+         :ok <- ensure_no_winner(game),
+         :ok <- ensure_round_remaining(found_room, game),
+         :ok <- ensure_player_in_room(found_room, valid_session_id),
+         {:ok, game} <- start_next_round(found_room, game) do
+      updated_room =
+        found_room
+        |> Map.put(:game, game)
+        |> Map.put(:updated_at, DateTime.utc_now())
+
+      new_state = put_in(state, [:rooms, updated_room.code], updated_room)
+      broadcast_rooms(new_state)
+      broadcast_room(updated_room)
+      {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:choose_first_lead, code, player_session_id, chosen_player_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, valid_chosen_player_id} <- validate_session_id(chosen_player_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_choose_first_lead_phase(game),
+         :ok <- ensure_lead_token_holder(game, valid_session_id),
+         :ok <- ensure_player_in_round(game, valid_chosen_player_id) do
+      game =
+        game
+        |> Map.put(:phase, :playing)
+        |> Map.put(:lead, valid_chosen_player_id)
+        |> Map.put(:current_player, valid_chosen_player_id)
+        |> Map.put(:current_trick, [])
+
+      updated_room =
+        found_room
+        |> Map.put(:game, game)
+        |> Map.put(:updated_at, DateTime.utc_now())
+
+      new_state = put_in(state, [:rooms, updated_room.code], updated_room)
+      broadcast_rooms(new_state)
+      broadcast_room(updated_room)
+      {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   defp fetch_room(nil), do: {:error, "Room not found"}
   defp fetch_room(room), do: {:ok, room}
 
@@ -407,6 +472,41 @@ defmodule TricktakersWeb.RoomRegistry do
 
   defp ensure_playing_phase(%{phase: :playing}), do: :ok
   defp ensure_playing_phase(_game), do: {:error, "Trick play is not active"}
+
+  defp ensure_round_complete_phase(%{phase: :round_complete}), do: :ok
+  defp ensure_round_complete_phase(_game), do: {:error, "Round is not complete"}
+
+  defp ensure_choose_first_lead_phase(%{phase: :choosing_first_lead}), do: :ok
+  defp ensure_choose_first_lead_phase(_game), do: {:error, "First lead choice is not active"}
+
+  defp ensure_no_winner(%{winner_id: winner_id}) when is_binary(winner_id),
+    do: {:error, "Game is complete"}
+
+  defp ensure_no_winner(_game), do: :ok
+
+  defp ensure_round_remaining(room, game) do
+    if game.round < max_rounds(room),
+      do: :ok,
+      else: {:error, "No rounds remain"}
+  end
+
+  defp ensure_player_in_room(room, player_session_id) do
+    if player_in_room?(room, player_session_id),
+      do: :ok,
+      else: {:error, "Player is not seated at this table"}
+  end
+
+  defp ensure_lead_token_holder(game, player_session_id) do
+    if game.lead_player_token_id == player_session_id,
+      do: :ok,
+      else: {:error, "Only the lead player token holder can choose the first lead"}
+  end
+
+  defp ensure_player_in_round(game, player_session_id) do
+    if player_session_id in (game.character_order || []),
+      do: :ok,
+      else: {:error, "Choose a seated player"}
+  end
 
   defp ensure_current_picker(game, player_name) do
     if current_picker(game) == player_name,
@@ -600,12 +700,50 @@ defmodule TricktakersWeb.RoomRegistry do
   defp start_playing_if_ready(game, false), do: Map.put(game, :phase, :character_setup)
 
   defp start_playing_if_ready(game, true) do
-    lead = game.lead || hd(game.character_order)
+    if game.round > 1 and is_binary(Map.get(game, :lead_player_token_id)) do
+      Map.put(game, :phase, :choosing_first_lead)
+    else
+      lead = game.lead || hd(game.character_order)
 
-    game
-    |> Map.put(:phase, :playing)
-    |> Map.put(:current_player, lead)
-    |> Map.put(:current_trick, [])
+      game
+      |> Map.put(:phase, :playing)
+      |> Map.put(:current_player, lead)
+      |> Map.put(:current_trick, [])
+    end
+  end
+
+  defp start_next_round(room, game) do
+    player_ids = Enum.map(room.players, & &1.id)
+    lead_player_token_id = game.next_lead_player_id || game.lead_player_token_id || hd(player_ids)
+    {hands, draw_pile} = Deck.deal_with_draw_pile(player_ids)
+
+    game =
+      game
+      |> Map.put(:phase, :character_selection)
+      |> Map.update!(:round, &(&1 + 1))
+      |> Map.put(:trick, 1)
+      |> Map.put(:lead, nil)
+      |> Map.put(:current_player, nil)
+      |> Map.put(:current_trick, [])
+      |> Map.put(:completed_tricks, [])
+      |> Map.put(:trick_wins, %{})
+      |> Map.put(:lead_player_token_id, lead_player_token_id)
+      |> Map.put(:character_order, rotate_player_order(player_ids, lead_player_token_id))
+      |> Map.put(:hands, hands)
+      |> Map.put(:draw_pile, draw_pile)
+      |> Map.put(:discards, [])
+      |> Map.put(:gambler_redraws, %{})
+      |> Map.put(:character_picks, %{})
+      |> Map.put(:current_picker_index, 0)
+      |> Map.put(:character_setup_order, [])
+      |> Map.put(:character_setup_done, %{})
+      |> Map.put(:current_setup_index, 0)
+      |> Map.put(:round_result, nil)
+      |> Map.put(:next_lead_player_id, nil)
+      |> Map.put(:winner_id, nil)
+      |> Map.put(:win_reason, nil)
+
+    {:ok, game}
   end
 
   defp fetch_hand_card(game, player_session_id, card_id) do
@@ -679,6 +817,7 @@ defmodule TricktakersWeb.RoomRegistry do
   defp complete_round(game) do
     result = Round.resolve(game)
     winner_id = result.character_winner_id || result.crown_winner_id
+    lead_player_token_id = result.next_lead_player_id || Map.get(game, :lead_player_token_id)
 
     game
     |> Map.put(:phase, :round_complete)
@@ -686,8 +825,18 @@ defmodule TricktakersWeb.RoomRegistry do
     |> Map.put(:crowns, result.crowns)
     |> Map.put(:points, result.points_after)
     |> Map.put(:next_lead_player_id, result.next_lead_player_id)
+    |> Map.put(:lead_player_token_id, lead_player_token_id)
     |> Map.put(:winner_id, winner_id)
     |> Map.put(:win_reason, win_reason(result))
+  end
+
+  defp max_rounds(%{max_players: 2}), do: 5
+  defp max_rounds(_room), do: 3
+
+  defp rotate_player_order(player_ids, player_id) do
+    index = Enum.find_index(player_ids, &(&1 == player_id)) || 0
+    {before, after_and_player} = Enum.split(player_ids, index)
+    after_and_player ++ before
   end
 
   defp win_reason(%{character_winner_id: winner_id}) when is_binary(winner_id), do: :character

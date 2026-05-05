@@ -146,6 +146,40 @@ defmodule TricktakersWebWeb.GameLive do
     end
   end
 
+  def handle_event("continue_next_round", _params, socket) do
+    case RoomRegistry.continue_next_round(
+           socket.assigns.room.code,
+           socket.assigns.player_session_id
+         ) do
+      {:ok, room} ->
+        {:noreply,
+         assign(socket,
+           room: room,
+           selected_character_id: nil,
+           selection_error: nil,
+           setup_error: nil,
+           setup_state: SetupState.new()
+         )}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
+  def handle_event("choose_first_lead", %{"player" => player_id}, socket) do
+    case RoomRegistry.choose_first_lead(
+           socket.assigns.room.code,
+           socket.assigns.player_session_id,
+           player_id
+         ) do
+      {:ok, room} ->
+        {:noreply, assign(socket, room: room, setup_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -188,7 +222,17 @@ defmodule TricktakersWebWeb.GameLive do
                     setup_error={@setup_error}
                   />
                 <% :round_complete -> %>
-                  <.round_complete_phase room={@room} player_session_id={@player_session_id} />
+                  <.round_complete_phase
+                    room={@room}
+                    player_session_id={@player_session_id}
+                    setup_error={@setup_error}
+                  />
+                <% :choosing_first_lead -> %>
+                  <.choosing_first_lead_phase
+                    room={@room}
+                    player_session_id={@player_session_id}
+                    setup_error={@setup_error}
+                  />
                 <% _phase -> %>
                   <.active_table
                     room={@room}
@@ -679,6 +723,7 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
+  attr :setup_error, :string, default: nil
 
   defp round_complete_phase(assigns) do
     assigns =
@@ -744,6 +789,106 @@ defmodule TricktakersWebWeb.GameLive do
           <div class="panel-soft">
             <div class="eyebrow">Next lead</div>
             <p class="body game-setup-note">{@summary.next_lead_label}</p>
+          </div>
+
+          <%= if @summary.can_continue? do %>
+            <button
+              id="continue-next-round"
+              type="button"
+              class="btn gold full"
+              phx-click="continue_next_round"
+            >
+              Continue to round {@summary.next_round}
+            </button>
+          <% end %>
+
+          <%= if @setup_error do %>
+            <p class="body-sm game-selection-error">{@setup_error}</p>
+          <% end %>
+        </aside>
+      </div>
+    </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :player_session_id, :string, required: true
+  attr :setup_error, :string, default: nil
+
+  defp choosing_first_lead_phase(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :lead_choice,
+        first_lead_choice_state(assigns.room, assigns.player_session_id)
+      )
+
+    ~H"""
+    <section id="choosing-first-lead" class="game-setup page-wide">
+      <header class="game-setup-header">
+        <div>
+          <div class="eyebrow">Round {@lead_choice.round} · Lead token</div>
+          <h1 class="tt-heading-1 game-setup-title">Choose the first lead.</h1>
+          <p class="body game-setup-copy">
+            Character setup is complete. The lead player token holder chooses who leads the first trick.
+          </p>
+        </div>
+        <div class="status-row game-setup-status">
+          <span class="pill solid">{@lead_choice.token_holder} holds the token</span>
+          <div class="sep"></div>
+          <span class="mono muted">{@room.code}</span>
+        </div>
+      </header>
+
+      <div class="game-setup-layout">
+        <section class="panel game-character-setup-card">
+          <div class="eyebrow">First trick leader</div>
+          <h2 class="tt-heading-2">
+            <%= if @lead_choice.your_turn? do %>
+              Pick any seated player.
+            <% else %>
+              Waiting for {@lead_choice.token_holder}.
+            <% end %>
+          </h2>
+          <p class="body game-setup-copy">
+            The chosen player starts trick 1. Normal trick winner rules decide later leads.
+          </p>
+
+          <div class="game-picker-list">
+            <%= for player <- @lead_choice.players do %>
+              <button
+                id={"choose-first-lead-#{player.id}"}
+                type="button"
+                class={["game-picker-row", player.you? && "you"]}
+                phx-click="choose_first_lead"
+                phx-value-player={player.id}
+                disabled={!@lead_choice.your_turn?}
+              >
+                <div class="row gap-2">
+                  <span class={["avatar", player.avatar_class]}>{player.initial}</span>
+                  <div>
+                    <div class="tt-heading-4">
+                      {player.name}{if player.you?, do: " (you)", else: ""}
+                    </div>
+                    <div class="body-sm muted">{player.character.name}</div>
+                  </div>
+                </div>
+                <span class="pill">Lead trick 1</span>
+              </button>
+            <% end %>
+          </div>
+
+          <%= if @setup_error do %>
+            <p class="body-sm game-selection-error">{@setup_error}</p>
+          <% end %>
+        </section>
+
+        <aside class="game-setup-sidebar">
+          <div class="panel-soft">
+            <div class="eyebrow">Timing</div>
+            <p class="body game-setup-note">
+              This choice happens only after all character setup for the new round is finished.
+            </p>
           </div>
         </aside>
       </div>
@@ -992,6 +1137,7 @@ defmodule TricktakersWebWeb.GameLive do
       total_tricks: 5,
       lead_suit: lead_suit,
       lead_label: lead_label(lead_suit),
+      lead_color: lead_label(lead_suit),
       active_player: current_player.name,
       waiting_for: current_player.name,
       turn_copy:
@@ -1025,6 +1171,8 @@ defmodule TricktakersWebWeb.GameLive do
         crown_player_label(room, result.gold_crown_winner_id, "No gold crown awarded"),
       black_crown_label: crown_players_label(room, result.black_crown_winner_ids),
       next_lead_label: next_lead_label(room, result.next_lead_player_id, winner_id),
+      can_continue?: is_nil(winner_id) and game.round < max_rounds(room),
+      next_round: game.round + 1,
       players:
         Enum.map(players, fn player ->
           %{
@@ -1040,6 +1188,29 @@ defmodule TricktakersWebWeb.GameLive do
                 player.id,
                 Map.get(game.points || %{}, player.id, 0)
               ),
+            you?: player.id == player_session_id
+          }
+        end)
+    }
+  end
+
+  defp first_lead_choice_state(room, player_session_id) do
+    game = room.game
+    players = seat_players(room.players, player_session_id, game.character_picks || %{})
+    token_holder_id = game.lead_player_token_id
+
+    %{
+      round: game.round,
+      token_holder: player_name(room, token_holder_id),
+      your_turn?: token_holder_id == player_session_id,
+      players:
+        Enum.map(players, fn player ->
+          %{
+            id: player.id,
+            name: player.name,
+            initial: player.initial,
+            avatar_class: player.avatar_class,
+            character: character_by_id(Map.get(game.character_picks, player.id)),
             you?: player.id == player_session_id
           }
         end)
@@ -1078,12 +1249,15 @@ defmodule TricktakersWebWeb.GameLive do
     do: "Game complete."
 
   defp next_lead_label(room, player_id, _winner_id) when is_binary(player_id),
-    do: "#{player_name(room, player_id)} leads the next round."
+    do: "#{player_name(room, player_id)} gets the lead player token."
 
   defp next_lead_label(_room, _player_id, _winner_id), do: "Next lead pending."
 
   defp signed_points(points) when points > 0, do: "+#{points} pts"
   defp signed_points(points), do: "#{points} pts"
+
+  defp max_rounds(%{max_players: 2}), do: 5
+  defp max_rounds(_room), do: 3
 
   defp legal_card_ids(game, player_session_id) do
     hand = get_in(game, [:hands, player_session_id]) || []
