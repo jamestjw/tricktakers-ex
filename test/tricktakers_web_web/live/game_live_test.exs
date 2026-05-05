@@ -35,4 +35,60 @@ defmodule TricktakersWebWeb.GameLiveTest do
     refute html =~ "No choice needed"
     refute html =~ "Complete setup"
   end
+
+  test "renders round complete summary", %{conn: conn} do
+    host_id = "summary-host-#{System.unique_integer([:positive])}"
+    player_id = "summary-player-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "King",
+          "room_name" => "Round Summary",
+          "max_players" => "2",
+          "mode" => "Basic"
+        },
+        host_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, player_id, "Gambler")
+    {:ok, room} = RoomRegistry.start_game(room.code, host_id)
+
+    round_result = %{
+      character_winner_id: nil,
+      gold_crown_winner_id: host_id,
+      black_crown_winner_ids: [player_id],
+      crown_winner_id: nil,
+      crowns: %{host_id => %{gold: 1, black: 0}, player_id => %{gold: 0, black: 1}},
+      points_before: %{host_id => 30, player_id => 50},
+      points_delta: %{host_id => 50, player_id => 30},
+      points_after: %{host_id => 80, player_id => 80},
+      next_lead_player_id: player_id
+    }
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :phase], :round_complete)
+      |> put_in([:rooms, room.code, :game, :round_result], round_result)
+      |> put_in([:rooms, room.code, :game, :character_picks], %{
+        host_id => "king",
+        player_id => "gambler"
+      })
+      |> put_in([:rooms, room.code, :game, :trick_wins], %{host_id => 3, player_id => 0})
+      |> put_in([:rooms, room.code, :game, :points], round_result.points_after)
+      |> put_in([:rooms, room.code, :game, :winner_id], nil)
+      |> put_in([:rooms, room.code, :game, :win_reason], nil)
+    end)
+
+    conn = Plug.Test.init_test_session(conn, %{"player_session_id" => host_id})
+
+    {:ok, _view, html} = live(conn, ~p"/games/#{room.code}")
+
+    assert html =~ "Round results."
+    assert html =~ "King · 3 tricks"
+    assert html =~ "+50 pts"
+    assert html =~ "Gold crown"
+    assert html =~ "Black crowns"
+    assert html =~ "Gambler leads the next round."
+  end
 end

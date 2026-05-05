@@ -2,6 +2,7 @@ defmodule TricktakersWeb.RoomRegistry do
   use GenServer
 
   alias TricktakersWeb.Game.Deck
+  alias TricktakersWeb.Game.Round
   alias TricktakersWeb.Game.Trick
 
   @topic "rooms"
@@ -157,6 +158,7 @@ defmodule TricktakersWeb.RoomRegistry do
         current_trick: [],
         completed_tricks: [],
         trick_wins: %{},
+        crowns: Map.new(player_ids, &{&1, %{gold: 0, black: 0}}),
         character_order: player_ids,
         points: Map.new(player_ids, &{&1, 30}),
         hands: hands,
@@ -649,24 +651,48 @@ defmodule TricktakersWeb.RoomRegistry do
         winner_id: winner_id
       }
 
-      game
-      |> Map.put(:completed_tricks, Map.get(game, :completed_tricks, []) ++ [completed_trick])
-      |> Map.put(
-        :trick_wins,
-        Map.update(Map.get(game, :trick_wins, %{}), winner_id, 1, &(&1 + 1))
-      )
-      |> Map.put(
-        :discards,
-        Map.get(game, :discards, []) ++ Enum.map(game.current_trick, & &1.card)
-      )
-      |> Map.put(:current_trick, [])
-      |> Map.put(:lead, winner_id)
-      |> Map.put(:current_player, winner_id)
-      |> Map.update!(:trick, &(&1 + 1))
+      game =
+        game
+        |> Map.put(:completed_tricks, Map.get(game, :completed_tricks, []) ++ [completed_trick])
+        |> Map.put(
+          :trick_wins,
+          Map.update(Map.get(game, :trick_wins, %{}), winner_id, 1, &(&1 + 1))
+        )
+        |> Map.put(
+          :discards,
+          Map.get(game, :discards, []) ++ Enum.map(game.current_trick, & &1.card)
+        )
+        |> Map.put(:current_trick, [])
+        |> Map.put(:lead, winner_id)
+        |> Map.put(:current_player, winner_id)
+
+      if length(game.completed_tricks) == 5 do
+        complete_round(game)
+      else
+        Map.update!(game, :trick, &(&1 + 1))
+      end
     else
       Map.put(game, :current_player, next_player_after(game.character_order, game.current_player))
     end
   end
+
+  defp complete_round(game) do
+    result = Round.resolve(game)
+    winner_id = result.character_winner_id || result.crown_winner_id
+
+    game
+    |> Map.put(:phase, :round_complete)
+    |> Map.put(:round_result, result)
+    |> Map.put(:crowns, result.crowns)
+    |> Map.put(:points, result.points_after)
+    |> Map.put(:next_lead_player_id, result.next_lead_player_id)
+    |> Map.put(:winner_id, winner_id)
+    |> Map.put(:win_reason, win_reason(result))
+  end
+
+  defp win_reason(%{character_winner_id: winner_id}) when is_binary(winner_id), do: :character
+  defp win_reason(%{crown_winner_id: winner_id}) when is_binary(winner_id), do: :crown
+  defp win_reason(_result), do: nil
 
   defp next_player_after(player_ids, player_id) do
     index = Enum.find_index(player_ids, &(&1 == player_id)) || 0

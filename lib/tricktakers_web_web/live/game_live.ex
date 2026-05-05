@@ -187,6 +187,8 @@ defmodule TricktakersWebWeb.GameLive do
                     setup_state={@setup_state}
                     setup_error={@setup_error}
                   />
+                <% :round_complete -> %>
+                  <.round_complete_phase room={@room} player_session_id={@player_session_id} />
                 <% _phase -> %>
                   <.active_table
                     room={@room}
@@ -677,6 +679,80 @@ defmodule TricktakersWebWeb.GameLive do
 
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
+
+  defp round_complete_phase(assigns) do
+    assigns =
+      assign(assigns, :summary, round_summary_state(assigns.room, assigns.player_session_id))
+
+    ~H"""
+    <section id="round-complete" class="game-setup page-wide">
+      <header class="game-setup-header">
+        <div>
+          <div class="eyebrow">Round {@summary.round} complete</div>
+          <h1 class="tt-heading-1 game-setup-title">Round results.</h1>
+          <p class="body game-setup-copy">
+            Crowns, points, and the next lead player are resolved after all 5 tricks.
+          </p>
+        </div>
+        <div class="status-row game-setup-status">
+          <span class="pill solid">{@summary.result_label}</span>
+          <div class="sep"></div>
+          <span class="mono muted">{@room.code}</span>
+        </div>
+      </header>
+
+      <div class="game-setup-layout">
+        <section class="panel game-character-setup-card">
+          <div class="eyebrow">Outcome</div>
+          <h2 class="tt-heading-2">{@summary.headline}</h2>
+          <p class="body game-setup-copy">{@summary.detail}</p>
+
+          <div class="game-picker-list">
+            <%= for player <- @summary.players do %>
+              <div class={["game-picker-row", player.you? && "you"]}>
+                <div class="row gap-2">
+                  <span class={["avatar", player.avatar_class]}>{player.initial}</span>
+                  <div>
+                    <div class="tt-heading-4">
+                      {player.name}{if player.you?, do: " (you)", else: ""}
+                    </div>
+                    <div class="body-sm muted">{player.character.name} · {player.tricks} tricks</div>
+                  </div>
+                </div>
+                <div class="row gap-2">
+                  <span class="pill">{signed_points(player.points_delta)}</span>
+                  <span class="pill solid">{player.points_after} pts</span>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </section>
+
+        <aside class="game-setup-sidebar">
+          <div class="panel">
+            <div class="eyebrow">Crowns</div>
+            <div class="game-picker-list">
+              <div class="game-picker-row">
+                <span>Gold crown</span><span class="pill gold">{@summary.gold_crown_label}</span>
+              </div>
+              <div class="game-picker-row">
+                <span>Black crowns</span><span class="pill">{@summary.black_crown_label}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-soft">
+            <div class="eyebrow">Next lead</div>
+            <p class="body game-setup-note">{@summary.next_lead_label}</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+    """
+  end
+
+  attr :room, :map, required: true
+  attr :player_session_id, :string, required: true
   attr :play_error, :string, default: nil
 
   defp active_table(assigns) do
@@ -933,6 +1009,81 @@ defmodule TricktakersWebWeb.GameLive do
         end)
     }
   end
+
+  defp round_summary_state(room, player_session_id) do
+    game = room.game
+    result = game.round_result
+    players = seat_players(room.players, player_session_id, game.character_picks || %{})
+    winner_id = game.winner_id
+
+    %{
+      round: game.round,
+      result_label: result_label(game.win_reason),
+      headline: round_headline(room, winner_id, game.win_reason),
+      detail: round_detail(room, result),
+      gold_crown_label:
+        crown_player_label(room, result.gold_crown_winner_id, "No gold crown awarded"),
+      black_crown_label: crown_players_label(room, result.black_crown_winner_ids),
+      next_lead_label: next_lead_label(room, result.next_lead_player_id, winner_id),
+      players:
+        Enum.map(players, fn player ->
+          %{
+            name: player.name,
+            initial: player.initial,
+            avatar_class: player.avatar_class,
+            character: character_by_id(Map.get(game.character_picks, player.id)),
+            tricks: Map.get(game.trick_wins || %{}, player.id, 0),
+            points_delta: Map.get(result.points_delta || %{}, player.id, 0),
+            points_after:
+              Map.get(
+                result.points_after || %{},
+                player.id,
+                Map.get(game.points || %{}, player.id, 0)
+              ),
+            you?: player.id == player_session_id
+          }
+        end)
+    }
+  end
+
+  defp result_label(:character), do: "Character victory"
+  defp result_label(:crown), do: "Crown victory"
+  defp result_label(_reason), do: "Round complete"
+
+  defp round_headline(_room, nil, _reason), do: "No immediate winner."
+
+  defp round_headline(room, winner_id, :character),
+    do: "#{player_name(room, winner_id)} wins by character condition."
+
+  defp round_headline(room, winner_id, :crown),
+    do: "#{player_name(room, winner_id)} wins by crowns."
+
+  defp round_headline(room, winner_id, _reason), do: "#{player_name(room, winner_id)} wins."
+
+  defp round_detail(_room, %{character_winner_id: winner_id}) when is_binary(winner_id),
+    do: "Character win conditions are checked before crowns and points."
+
+  defp round_detail(_room, _result), do: "Crowns and point changes have been applied."
+
+  defp crown_player_label(_room, nil, fallback), do: fallback
+  defp crown_player_label(room, player_id, _fallback), do: player_name(room, player_id)
+
+  defp crown_players_label(_room, []), do: "No black crowns awarded"
+
+  defp crown_players_label(room, player_ids) do
+    player_ids |> Enum.map(&player_name(room, &1)) |> Enum.join(", ")
+  end
+
+  defp next_lead_label(_room, _next_lead_player_id, winner_id) when is_binary(winner_id),
+    do: "Game complete."
+
+  defp next_lead_label(room, player_id, _winner_id) when is_binary(player_id),
+    do: "#{player_name(room, player_id)} leads the next round."
+
+  defp next_lead_label(_room, _player_id, _winner_id), do: "Next lead pending."
+
+  defp signed_points(points) when points > 0, do: "+#{points} pts"
+  defp signed_points(points), do: "#{points} pts"
 
   defp legal_card_ids(game, player_session_id) do
     hand = get_in(game, [:hands, player_session_id]) || []
