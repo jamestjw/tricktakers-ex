@@ -1166,7 +1166,7 @@ defmodule TricktakersWebWeb.GameLive do
       round: game.round,
       result_label: result_label(game.win_reason),
       headline: round_headline(room, winner_id, game.win_reason),
-      detail: round_detail(room, result),
+      detail: round_detail(room, result, game.win_reason),
       gold_crown_label:
         crown_player_label(room, result.gold_crown_winner_id, "No gold crown awarded"),
       black_crown_label: crown_players_label(room, result.black_crown_winner_ids),
@@ -1219,6 +1219,7 @@ defmodule TricktakersWebWeb.GameLive do
 
   defp result_label(:character), do: "Character victory"
   defp result_label(:crown), do: "Crown victory"
+  defp result_label(:points), do: "Final points victory"
   defp result_label(_reason), do: "Round complete"
 
   defp round_headline(_room, nil, _reason), do: "No immediate winner."
@@ -1229,12 +1230,36 @@ defmodule TricktakersWebWeb.GameLive do
   defp round_headline(room, winner_id, :crown),
     do: "#{player_name(room, winner_id)} wins by crowns."
 
+  defp round_headline(room, winner_id, :points),
+    do: "#{player_name(room, winner_id)} wins by final points."
+
   defp round_headline(room, winner_id, _reason), do: "#{player_name(room, winner_id)} wins."
 
-  defp round_detail(_room, %{character_winner_id: winner_id}) when is_binary(winner_id),
+  defp round_detail(_room, %{character_winner_id: winner_id}, _reason) when is_binary(winner_id),
     do: "Character win conditions are checked before crowns and points."
 
-  defp round_detail(_room, _result), do: "Crowns and point changes have been applied."
+  defp round_detail(_room, result, :points) do
+    if final_points_tied?(result.points_after || %{}) do
+      "Final points were tied, so character precedence broke the tie."
+    else
+      "No character or crown victory occurred, so final points decided the game."
+    end
+  end
+
+  defp round_detail(_room, _result, _reason), do: "Crowns and point changes have been applied."
+
+  defp final_points_tied?(points) do
+    {_max_points, count} =
+      Enum.reduce(points, {nil, 0}, fn {_player_id, points}, {max_points, count} ->
+        cond do
+          is_nil(max_points) or points > max_points -> {points, 1}
+          points == max_points -> {max_points, count + 1}
+          true -> {max_points, count}
+        end
+      end)
+
+    count > 1
+  end
 
   defp crown_player_label(_room, nil, fallback), do: fallback
   defp crown_player_label(room, player_id, _fallback), do: player_name(room, player_id)

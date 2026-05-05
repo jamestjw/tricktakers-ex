@@ -256,6 +256,32 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.trick == 1
   end
 
+  test "final round falls back to highest points when no immediate winner exists" do
+    {room, host_id, player_id} = start_playing_game("Final Points")
+    room = put_final_trick_state(room, %{host_id => 90, player_id => 50})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, final_winning_card().id)
+
+    assert room.game.phase == :round_complete
+    assert room.game.winner_id == host_id
+    assert room.game.win_reason == :points
+    assert room.game.points[host_id] == 110
+    assert room.game.points[player_id] == 80
+  end
+
+  test "final point ties fall back to character precedence" do
+    {room, host_id, player_id} = start_playing_game("Final Point Tie")
+    room = put_final_trick_state(room, %{host_id => 80, player_id => 70})
+
+    {:ok, room} = RoomRegistry.play_card(room.code, host_id, final_winning_card().id)
+
+    assert room.game.phase == :round_complete
+    assert room.game.points[host_id] == 100
+    assert room.game.points[player_id] == 100
+    assert room.game.winner_id == host_id
+    assert room.game.win_reason == :points
+  end
+
   defp start_king_gambler_setup(room_name) do
     host_id = "gambler-host-#{System.unique_integer([:positive])}"
     player_id = "gambler-player-#{System.unique_integer([:positive])}"
@@ -343,4 +369,42 @@ defmodule TricktakersWeb.RoomRegistryTest do
 
     RoomRegistry.get_room(room.code)
   end
+
+  defp put_final_trick_state(room, points) do
+    [host_id, player_id] = Enum.map(room.players, & &1.id)
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :round], 5)
+      |> put_in([:rooms, room.code, :game, :trick], 5)
+      |> put_in([:rooms, room.code, :game, :points], points)
+      |> put_in([:rooms, room.code, :game, :crowns], %{
+        host_id => %{gold: 0, black: 0},
+        player_id => %{gold: 0, black: 0}
+      })
+      |> put_in([:rooms, room.code, :game, :trick_wins], %{host_id => 0, player_id => 3})
+      |> put_in([:rooms, room.code, :game, :completed_tricks], completed_tricks(4))
+      |> put_in([:rooms, room.code, :game, :current_trick], [
+        %{player_id: player_id, card: final_led_card()}
+      ])
+      |> put_in([:rooms, room.code, :game, :current_player], host_id)
+      |> put_in([:rooms, room.code, :game, :hands, host_id], [final_winning_card()])
+      |> put_in([:rooms, room.code, :game, :hands, player_id], [])
+      |> put_in([:rooms, room.code, :game, :character_setup_done, player_id], %{
+        "bid" => "0",
+        "wager" => "0"
+      })
+    end)
+
+    RoomRegistry.get_room(room.code)
+  end
+
+  defp completed_tricks(count) do
+    Enum.map(1..count, fn trick ->
+      %{trick: trick, lead_suit: :red, plays: [], winner_id: "past-winner-#{trick}"}
+    end)
+  end
+
+  defp final_led_card, do: %{id: "final-red-3", kind: :number, suit: :red, rank: 3}
+  defp final_winning_card, do: %{id: "final-black-1", kind: :number, suit: :black, rank: 1}
 end

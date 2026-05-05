@@ -312,7 +312,7 @@ defmodule TricktakersWeb.RoomRegistry do
          :ok <- ensure_current_player(game, valid_session_id),
          {:ok, card} <- fetch_hand_card(game, valid_session_id, card_id),
          :ok <- ensure_legal_play(game, valid_session_id, card),
-         {:ok, game} <- play_card_in_game(game, valid_session_id, card) do
+         {:ok, game} <- play_card_in_game(game, valid_session_id, card, max_rounds(found_room)) do
       updated_room =
         found_room
         |> Map.put(:game, game)
@@ -765,7 +765,7 @@ defmodule TricktakersWeb.RoomRegistry do
       else: {:error, "You must follow the lead suit if able"}
   end
 
-  defp play_card_in_game(game, player_session_id, card) do
+  defp play_card_in_game(game, player_session_id, card, max_rounds) do
     hand = get_in(game, [:hands, player_session_id]) || []
     hand = Enum.reject(hand, &(&1.id == card.id))
     current_trick = (game.current_trick || []) ++ [%{player_id: player_session_id, card: card}]
@@ -775,10 +775,10 @@ defmodule TricktakersWeb.RoomRegistry do
       |> put_in([:hands, player_session_id], hand)
       |> Map.put(:current_trick, current_trick)
 
-    {:ok, advance_trick_if_complete(game)}
+    {:ok, advance_trick_if_complete(game, max_rounds)}
   end
 
-  defp advance_trick_if_complete(game) do
+  defp advance_trick_if_complete(game, max_rounds) do
     if length(game.current_trick) == length(game.character_order) do
       winner_id = Trick.winning_play(game.current_trick).player_id
 
@@ -805,7 +805,7 @@ defmodule TricktakersWeb.RoomRegistry do
         |> Map.put(:current_player, winner_id)
 
       if length(game.completed_tricks) == 5 do
-        complete_round(game)
+        complete_round(game, max_rounds)
       else
         Map.update!(game, :trick, &(&1 + 1))
       end
@@ -814,9 +814,10 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
-  defp complete_round(game) do
+  defp complete_round(game, max_rounds) do
     result = Round.resolve(game)
-    winner_id = result.character_winner_id || result.crown_winner_id
+    point_winner_id = point_winner_id(game, result, max_rounds)
+    winner_id = result.character_winner_id || result.crown_winner_id || point_winner_id
     lead_player_token_id = result.next_lead_player_id || Map.get(game, :lead_player_token_id)
 
     game
@@ -827,7 +828,7 @@ defmodule TricktakersWeb.RoomRegistry do
     |> Map.put(:next_lead_player_id, result.next_lead_player_id)
     |> Map.put(:lead_player_token_id, lead_player_token_id)
     |> Map.put(:winner_id, winner_id)
-    |> Map.put(:win_reason, win_reason(result))
+    |> Map.put(:win_reason, win_reason(result, point_winner_id))
   end
 
   defp max_rounds(%{max_players: 2}), do: 5
@@ -839,9 +840,33 @@ defmodule TricktakersWeb.RoomRegistry do
     after_and_player ++ before
   end
 
-  defp win_reason(%{character_winner_id: winner_id}) when is_binary(winner_id), do: :character
-  defp win_reason(%{crown_winner_id: winner_id}) when is_binary(winner_id), do: :crown
-  defp win_reason(_result), do: nil
+  defp point_winner_id(%{round: round} = game, result, max_rounds) when round == max_rounds do
+    if result.character_winner_id || result.crown_winner_id do
+      nil
+    else
+      character_picks = Map.get(game, :character_picks, %{})
+
+      result.points_after
+      |> Enum.max_by(
+        fn {player_id, points} ->
+          {points, -character_priority_rank(Map.get(character_picks, player_id))}
+        end,
+        fn -> {nil, nil} end
+      )
+      |> elem(0)
+    end
+  end
+
+  defp point_winner_id(_game, _result, _max_rounds), do: nil
+
+  defp win_reason(%{character_winner_id: winner_id}, _point_winner_id) when is_binary(winner_id),
+    do: :character
+
+  defp win_reason(%{crown_winner_id: winner_id}, _point_winner_id) when is_binary(winner_id),
+    do: :crown
+
+  defp win_reason(_result, winner_id) when is_binary(winner_id), do: :points
+  defp win_reason(_result, _point_winner_id), do: nil
 
   defp next_player_after(player_ids, player_id) do
     index = Enum.find_index(player_ids, &(&1 == player_id)) || 0
