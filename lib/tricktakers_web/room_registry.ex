@@ -47,6 +47,14 @@ defmodule TricktakersWeb.RoomRegistry do
     GenServer.call(__MODULE__, {:play_card, code, player_session_id, card_id, declare_revolt?})
   end
 
+  def draw_hermit_card(code, player_session_id) do
+    GenServer.call(__MODULE__, {:draw_hermit_card, code, player_session_id})
+  end
+
+  def discard_hermit_card(code, player_session_id, card_id) do
+    GenServer.call(__MODULE__, {:discard_hermit_card, code, player_session_id, card_id})
+  end
+
   def continue_next_round(code, player_session_id) do
     GenServer.call(__MODULE__, {:continue_next_round, code, player_session_id})
   end
@@ -175,6 +183,7 @@ defmodule TricktakersWeb.RoomRegistry do
         discards: [],
         revolt: %{used_player_ids: [], active_trick: nil, declared_by: nil},
         gambler_redraws: %{},
+        hermit_pending_draws: %{},
         character_picks: %{},
         current_picker_index: 0,
         character_setup_order: [],
@@ -311,6 +320,7 @@ defmodule TricktakersWeb.RoomRegistry do
          {:ok, game} <- fetch_game(found_room),
          :ok <- ensure_playing_phase(game),
          :ok <- ensure_current_player(game, valid_session_id),
+         :ok <- ensure_no_hermit_pending_draw(game, valid_session_id),
          {:ok, card} <- fetch_hand_card(game, valid_session_id, card_id),
          :ok <- ensure_legal_play(game, valid_session_id, card),
          {:ok, game} <- maybe_declare_kakumei(game, valid_session_id, declare_revolt?),
@@ -324,6 +334,39 @@ defmodule TricktakersWeb.RoomRegistry do
       broadcast_rooms(new_state)
       broadcast_room(updated_room)
       {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:draw_hermit_card, code, player_session_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_playing_phase(game),
+         :ok <- ensure_current_player(game, valid_session_id),
+         :ok <- ensure_current_character(game, valid_session_id, "hermit"),
+         :ok <- ensure_no_hermit_pending_draw(game, valid_session_id),
+         {:ok, game} <- begin_hermit_draw(game, valid_session_id) do
+      update_room_game(found_room, game, state)
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:discard_hermit_card, code, player_session_id, card_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_playing_phase(game),
+         :ok <- ensure_current_player(game, valid_session_id),
+         :ok <- ensure_hermit_pending_draw(game, valid_session_id),
+         {:ok, game} <- finish_hermit_discard(game, valid_session_id, card_id) do
+      update_room_game(found_room, game, state)
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -526,6 +569,18 @@ defmodule TricktakersWeb.RoomRegistry do
     if game.current_player == player_session_id,
       do: :ok,
       else: {:error, "It is not your turn to play"}
+  end
+
+  defp ensure_no_hermit_pending_draw(game, player_session_id) do
+    if Map.has_key?(Map.get(game, :hermit_pending_draws, %{}), player_session_id),
+      do: {:error, "Discard a card before playing"},
+      else: :ok
+  end
+
+  defp ensure_hermit_pending_draw(game, player_session_id) do
+    if Map.has_key?(Map.get(game, :hermit_pending_draws, %{}), player_session_id),
+      do: :ok,
+      else: {:error, "Draw a card before discarding"}
   end
 
   defp ensure_resistance_player(game, player_session_id) do
@@ -733,6 +788,49 @@ defmodule TricktakersWeb.RoomRegistry do
     end
   end
 
+  defp begin_hermit_draw(game, player_session_id) do
+    case Map.get(game, :draw_pile, []) do
+      [card | draw_pile] ->
+        game =
+          game
+          |> put_in(
+            [:hands, player_session_id],
+            (get_in(game, [:hands, player_session_id]) || []) ++ [card]
+          )
+          |> Map.put(:draw_pile, draw_pile)
+          |> Map.put(
+            :hermit_pending_draws,
+            Map.put(Map.get(game, :hermit_pending_draws, %{}), player_session_id, card.id)
+          )
+
+        {:ok, game}
+
+      [] ->
+        {:error, "There are not enough cards to draw"}
+    end
+  end
+
+  defp finish_hermit_discard(game, player_session_id, card_id) do
+    hand = get_in(game, [:hands, player_session_id]) || []
+
+    case Enum.find(hand, &(&1.id == card_id)) do
+      nil ->
+        {:error, "Choose a card from your hand"}
+
+      card ->
+        game =
+          game
+          |> put_in([:hands, player_session_id], Enum.reject(hand, &(&1.id == card.id)))
+          |> Map.put(:discards, Map.get(game, :discards, []) ++ [card])
+          |> Map.put(
+            :hermit_pending_draws,
+            Map.delete(game.hermit_pending_draws, player_session_id)
+          )
+
+        {:ok, game}
+    end
+  end
+
   defp replace_discarded_cards(hand, discard_id_set, drawn_cards) do
     Enum.reduce(hand, {[], [], drawn_cards}, fn card, {new_hand, discarded_cards, drawn_cards} ->
       if MapSet.member?(discard_id_set, card.id) do
@@ -781,6 +879,7 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:discards, [])
       |> Map.put(:revolt, %{used_player_ids: [], active_trick: nil, declared_by: nil})
       |> Map.put(:gambler_redraws, %{})
+      |> Map.put(:hermit_pending_draws, %{})
       |> Map.put(:character_picks, %{})
       |> Map.put(:current_picker_index, 0)
       |> Map.put(:character_setup_order, [])
@@ -957,6 +1056,14 @@ defmodule TricktakersWeb.RoomRegistry do
       {player_id, ^character_id} -> player_id
       _pick -> nil
     end)
+  end
+
+  defp update_room_game(room, game, state) do
+    updated_room = room |> Map.put(:game, game) |> Map.put(:updated_at, DateTime.utc_now())
+    new_state = put_in(state, [:rooms, updated_room.code], updated_room)
+    broadcast_rooms(new_state)
+    broadcast_room(updated_room)
+    {:reply, {:ok, updated_room}, new_state}
   end
 
   defp next_picker_index(game, picks) do

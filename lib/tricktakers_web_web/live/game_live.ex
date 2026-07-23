@@ -148,6 +148,24 @@ defmodule TricktakersWebWeb.GameLive do
     end
   end
 
+  def handle_event("draw_hermit_card", _params, socket) do
+    case RoomRegistry.draw_hermit_card(socket.assigns.room.code, socket.assigns.player_session_id) do
+      {:ok, room} -> {:noreply, assign(socket, room: room, setup_error: nil)}
+      {:error, reason} -> {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
+  def handle_event("discard_hermit_card", %{"card" => card_id}, socket) do
+    case RoomRegistry.discard_hermit_card(
+           socket.assigns.room.code,
+           socket.assigns.player_session_id,
+           card_id
+         ) do
+      {:ok, room} -> {:noreply, assign(socket, room: room, setup_error: nil)}
+      {:error, reason} -> {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
   def handle_event("declare_kakumei", _params, socket) do
     if can_declare_kakumei?(socket.assigns.room.game, socket.assigns.player_session_id) do
       {:noreply, assign(socket, revolt_ready?: true, setup_error: nil)}
@@ -1012,7 +1030,9 @@ defmodule TricktakersWebWeb.GameLive do
                     card[:disabled] && "disabled"
                   ]}
                   style={hand_card_style(index, length(@table.hand))}
-                  phx-click="play_card"
+                  phx-click={
+                    if @table.hermit_discarding?, do: "discard_hermit_card", else: "play_card"
+                  }
                   phx-value-card={card.id}
                   disabled={card[:disabled]}
                   aria-label={card_label(card)}
@@ -1026,6 +1046,17 @@ defmodule TricktakersWebWeb.GameLive do
               <p class="body-sm game-selection-error">{@table.play_error}</p>
             <% end %>
           </div>
+
+          <%= if @table.show_hermit_draw? do %>
+            <button
+              id="draw-hermit-card"
+              type="button"
+              class="btn ghost sm"
+              phx-click="draw_hermit_card"
+            >
+              Draw then discard
+            </button>
+          <% end %>
 
           <aside class="game-turn-panel">
             <div class="row gap-3">
@@ -1157,6 +1188,11 @@ defmodule TricktakersWebWeb.GameLive do
     legal_card_ids = legal_card_ids(game, player_session_id)
     your_turn? = game.current_player == player_session_id
     resistance? = Map.get(game.character_picks || %{}, player_session_id) == "resistance"
+    hermit? = Map.get(game.character_picks || %{}, player_session_id) == "hermit"
+
+    hermit_discarding? =
+      Map.has_key?(Map.get(game, :hermit_pending_draws, %{}), player_session_id)
+
     revolt_active? = get_in(game, [:revolt, :active_trick]) == game.trick
 
     %{
@@ -1173,6 +1209,8 @@ defmodule TricktakersWebWeb.GameLive do
       show_kakumei_button?: resistance?,
       can_declare_kakumei?: can_declare_kakumei?(game, player_session_id),
       revolt_active?: revolt_active?,
+      hermit_discarding?: hermit_discarding?,
+      show_hermit_draw?: hermit? and your_turn? and not hermit_discarding?,
       hand_prompt: hand_prompt(your_turn?, lead_suit),
       play_error: play_error,
       you: you,
@@ -1182,7 +1220,11 @@ defmodule TricktakersWebWeb.GameLive do
         room
         |> hand_for(player_session_id)
         |> Enum.map(fn card ->
-          Map.put(card, :disabled, not your_turn? or card.id not in legal_card_ids)
+          Map.put(
+            card,
+            :disabled,
+            not your_turn? or (not hermit_discarding? and card.id not in legal_card_ids)
+          )
         end)
     }
   end

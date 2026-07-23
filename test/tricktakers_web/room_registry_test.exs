@@ -168,6 +168,30 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.trick_wins[host_id] == 1
   end
 
+  test "hermit draws from the standard deck and may discard the drawn card before playing" do
+    {room, hermit_id, king_id} = start_hermit_playing_game("Hermit Draw")
+    red_3 = %{id: "hermit-red-3", kind: :number, suit: :red, rank: 3}
+    red_4 = %{id: "king-red-4", kind: :number, suit: :red, rank: 4}
+    drawn = %{id: "hermit-drawn", kind: :number, suit: :blue, rank: 8}
+
+    room = put_player_hands(room, %{hermit_id => [red_3], king_id => [red_4]})
+    room = put_room_draw_pile(room, [drawn])
+
+    {:ok, room} = RoomRegistry.draw_hermit_card(room.code, hermit_id)
+
+    assert room.game.hands[hermit_id] == [red_3, drawn]
+    assert room.game.hermit_pending_draws[hermit_id] == drawn.id
+
+    assert {:error, "Discard a card before playing"} =
+             RoomRegistry.play_card(room.code, hermit_id, red_3.id)
+
+    {:ok, room} = RoomRegistry.discard_hermit_card(room.code, hermit_id, drawn.id)
+
+    assert room.game.hands[hermit_id] == [red_3]
+    assert drawn in room.game.discards
+    refute Map.has_key?(room.game.hermit_pending_draws, hermit_id)
+  end
+
   test "rare and white flag can be played while holding the lead suit" do
     {room, host_id, player_id} = start_playing_game("Colorless Plays")
     red_3 = %{id: "test-red-3", kind: :number, suit: :red, rank: 3}
@@ -386,6 +410,36 @@ defmodule TricktakersWeb.RoomRegistryTest do
     {room, resistance_id, player_id}
   end
 
+  defp start_hermit_playing_game(room_name) do
+    hermit_id = "hermit-host-#{System.unique_integer([:positive])}"
+    king_id = "hermit-king-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "Hermit",
+          "room_name" => room_name,
+          "max_players" => "2",
+          "mode" => "Basic"
+        },
+        hermit_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, king_id, "King")
+    {:ok, room} = RoomRegistry.start_game(room.code, hermit_id)
+    {:ok, room} = RoomRegistry.choose_character(room.code, hermit_id, "hermit")
+    {:ok, room} = RoomRegistry.choose_character(room.code, king_id, "king")
+    king_discard = hd(room.game.hands[king_id])
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, king_id, %{"discard" => king_discard.id})
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, hermit_id, %{"notes" => "auto"})
+
+    {room, hermit_id, king_id}
+  end
+
   defp put_player_hands(room, hands) do
     :sys.replace_state(RoomRegistry, fn state ->
       Enum.reduce(hands, state, fn {player_id, hand}, state ->
@@ -394,6 +448,12 @@ defmodule TricktakersWeb.RoomRegistryTest do
     end)
 
     RoomRegistry.get_room(room.code)
+  end
+
+  defp put_room_draw_pile(room, draw_pile) do
+    room = put_in(room, [:game, :draw_pile], draw_pile)
+    :sys.replace_state(RoomRegistry, fn state -> put_in(state, [:rooms, room.code], room) end)
+    room
   end
 
   defp put_room_round(room, round) do
