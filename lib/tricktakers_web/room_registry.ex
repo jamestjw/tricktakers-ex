@@ -185,6 +185,7 @@ defmodule TricktakersWeb.RoomRegistry do
         gambler_redraws: %{},
         hermit_pending_draws: %{},
         character_picks: %{},
+        used_characters: Map.new(player_ids, &{&1, []}),
         current_picker_index: 0,
         character_setup_order: [],
         character_setup_done: %{},
@@ -217,8 +218,20 @@ defmodule TricktakersWeb.RoomRegistry do
          :ok <- ensure_current_picker(game, valid_session_id),
          {:ok, valid_character_id} <- validate_character_id(found_room.mode, character_id),
          :ok <- ensure_king_not_reselected(game, valid_session_id, valid_character_id),
+         :ok <- ensure_two_player_character_available(game, valid_session_id, valid_character_id),
          :ok <- ensure_character_available(game, valid_character_id) do
       picks = Map.put(game.character_picks, valid_session_id, valid_character_id)
+
+      used_characters =
+        if two_player_game?(game),
+          do:
+            Map.update!(
+              game.used_characters,
+              valid_session_id,
+              &Enum.uniq([valid_character_id | &1])
+            ),
+          else: game.used_characters
+
       all_picked? = map_size(picks) == length(game.character_order)
 
       game =
@@ -227,6 +240,7 @@ defmodule TricktakersWeb.RoomRegistry do
 
           game
           |> Map.put(:character_picks, picks)
+          |> Map.put(:used_characters, used_characters)
           |> Map.put(:phase, :character_setup)
           |> Map.put(:character_setup_order, setup_order)
           |> Map.put(:character_setup_done, %{})
@@ -235,6 +249,8 @@ defmodule TricktakersWeb.RoomRegistry do
         else
           game
           |> Map.put(:character_picks, picks)
+          |> Map.put(:current_picker_index, next_picker_index(game, picks))
+          |> Map.put(:used_characters, used_characters)
           |> Map.put(:current_picker_index, next_picker_index(game, picks))
         end
 
@@ -628,6 +644,15 @@ defmodule TricktakersWeb.RoomRegistry do
 
   defp ensure_king_not_reselected(_game, _player_session_id, _character_id), do: :ok
 
+  defp ensure_two_player_character_available(game, player_session_id, character_id) do
+    if two_player_game?(game) and
+         character_id in Map.get(game.used_characters, player_session_id, []) do
+      {:error, "Each basic character can only be used once per two-player game"}
+    else
+      :ok
+    end
+  end
+
   defp validate_character_id(mode, character_id) do
     normalized = String.trim(character_id || "")
 
@@ -873,10 +898,22 @@ defmodule TricktakersWeb.RoomRegistry do
 
     character_order = character_selection_order(game, player_ids)
 
+    next_round = game.round + 1
+    final_two_player_round? = length(player_ids) == 2 and next_round == 5
+
+    final_picks =
+      if final_two_player_round?, do: final_two_player_picks(game, player_ids), else: %{}
+
+    setup_order =
+      if final_two_player_round?, do: character_setup_order(player_ids, final_picks), else: []
+
     game =
       game
-      |> Map.put(:phase, :character_selection)
-      |> Map.update!(:round, &(&1 + 1))
+      |> Map.put(
+        :phase,
+        if(final_two_player_round?, do: :character_setup, else: :character_selection)
+      )
+      |> Map.put(:round, next_round)
       |> Map.put(:trick, 1)
       |> Map.put(:lead, nil)
       |> Map.put(:current_player, nil)
@@ -891,16 +928,18 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:revolt, %{used_player_ids: [], active_trick: nil, declared_by: nil})
       |> Map.put(:gambler_redraws, %{})
       |> Map.put(:hermit_pending_draws, %{})
-      |> Map.put(:character_picks, %{})
+      |> Map.put(:character_picks, final_picks)
       |> Map.put(:prior_character_picks, game.character_picks)
       |> Map.put(:current_picker_index, 0)
-      |> Map.put(:character_setup_order, [])
+      |> Map.put(:character_setup_order, setup_order)
       |> Map.put(:character_setup_done, %{})
       |> Map.put(:current_setup_index, 0)
       |> Map.put(:round_result, nil)
       |> Map.put(:next_lead_player_id, nil)
       |> Map.put(:winner_id, nil)
       |> Map.put(:win_reason, nil)
+
+    game = if final_two_player_round?, do: apply_setup_start_bonuses(game), else: game
 
     {:ok, game}
   end
@@ -1029,6 +1068,15 @@ defmodule TricktakersWeb.RoomRegistry do
 
     if king_player_id, do: [king_player_id | ordered_remaining], else: ordered_remaining
   end
+
+  defp final_two_player_picks(game, player_ids) do
+    Map.new(player_ids, fn player_id ->
+      remaining = character_ids_for_mode("Basic") -- Map.get(game.used_characters, player_id, [])
+      {player_id, hd(remaining)}
+    end)
+  end
+
+  defp two_player_game?(game), do: length(game.character_order || []) == 2
 
   defp mark_kakumei(game, player_session_id) do
     revolt = Map.get(game, :revolt, %{used_player_ids: [], active_trick: nil, declared_by: nil})
