@@ -33,19 +33,24 @@ defmodule TricktakersWeb.Game.Round do
         next_lead_player_id: nil
       }
     else
-      gold_crown_winner_id = gold_crown_winner_id(game)
-      black_crown_winner_ids = black_crown_winner_ids(game)
+      two_player? = Map.get(game, :two_player?, false)
+      gold_crown_winner_id = if two_player?, do: nil, else: gold_crown_winner_id(game)
+      black_crown_winner_ids = if two_player?, do: [], else: black_crown_winner_ids(game)
       points_delta = points_delta(game)
       points_after = apply_points(points_before, points_delta)
 
       crowns =
-        award_crowns(Map.get(game, :crowns, %{}), gold_crown_winner_id, black_crown_winner_ids)
+        if two_player? do
+          Map.get(game, :crowns, %{})
+        else
+          award_crowns(Map.get(game, :crowns, %{}), gold_crown_winner_id, black_crown_winner_ids)
+        end
 
       %{
         character_winner_id: nil,
         gold_crown_winner_id: gold_crown_winner_id,
         black_crown_winner_ids: black_crown_winner_ids,
-        crown_winner_id: crown_winner_id(crowns),
+        crown_winner_id: if(two_player?, do: nil, else: crown_winner_id(crowns)),
         crowns: crowns,
         points_before: points_before,
         points_delta: points_delta,

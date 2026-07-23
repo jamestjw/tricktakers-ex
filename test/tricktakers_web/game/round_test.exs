@@ -57,6 +57,21 @@ defmodule TricktakersWeb.Game.RoundTest do
     assert result.crowns["king"].gold == 2
   end
 
+  test "two-player games do not award or use crowns" do
+    result =
+      game(%{king: 3, gambler: 2}, %{}, 1, %{
+        "king" => %{gold: 1, black: 0},
+        "gambler" => %{gold: 0, black: 2}
+      })
+      |> Map.put(:two_player?, true)
+      |> Round.resolve()
+
+    assert result.gold_crown_winner_id == nil
+    assert result.black_crown_winner_ids == []
+    assert result.crown_winner_id == nil
+    assert result.crowns == %{"king" => %{gold: 1, black: 0}, "gambler" => %{gold: 0, black: 2}}
+  end
+
   test "scores king trick points and doubles only those points in round 3" do
     assert Round.resolve(game(%{king: 4, gambler: 1}, %{}, 1)).points_delta["king"] == 120
     assert Round.resolve(game(%{king: 4, gambler: 1}, %{}, 3)).points_delta["king"] == 240

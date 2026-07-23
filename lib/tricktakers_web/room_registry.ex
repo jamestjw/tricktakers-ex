@@ -166,6 +166,7 @@ defmodule TricktakersWeb.RoomRegistry do
 
       game = %{
         started_at: DateTime.utc_now(),
+        two_player?: length(player_ids) == 2,
         phase: :character_selection,
         round: 1,
         trick: 1,
