@@ -212,32 +212,32 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert [%{lead_suit: :blue, winner_id: ^host_id}] = room.game.completed_tricks
   end
 
-  test "resistance can declare kakumei once and revolt makes lowest non-black card win" do
+  test "resistance declares Kakumei while playing and revolt makes lowest non-black card win" do
     {room, resistance_id, player_id} = start_resistance_playing_game("Kakumei")
     red_9 = %{id: "revolt-red-9", kind: :number, suit: :red, rank: 9}
     black_1 = %{id: "revolt-black-1", kind: :number, suit: :black, rank: 1}
     room = put_player_hands(room, %{resistance_id => [red_9], player_id => [black_1]})
 
-    {:ok, room} = RoomRegistry.declare_kakumei(room.code, resistance_id)
+    {:ok, room} = RoomRegistry.play_card(room.code, resistance_id, red_9.id, true)
     assert room.game.revolt.active_trick == 1
-
-    {:ok, room} = RoomRegistry.play_card(room.code, resistance_id, red_9.id)
     {:ok, room} = RoomRegistry.play_card(room.code, player_id, black_1.id)
 
     assert [%{revolt?: true, revolt_player_id: ^resistance_id, winner_id: ^resistance_id}] =
              room.game.completed_tricks
 
     assert room.game.revolt.active_trick == nil
-
-    assert {:error, "Kakumei has already been declared this round"} =
-             RoomRegistry.declare_kakumei(room.code, resistance_id)
   end
 
-  test "only resistance can declare kakumei" do
-    {room, _resistance_id, player_id} = start_resistance_playing_game("Only Resistance")
+  test "only resistance can declare Kakumei while playing" do
+    {room, resistance_id, player_id} = start_resistance_playing_game("Only Resistance")
+    resistance_card = %{id: "resistance-red-3", kind: :number, suit: :red, rank: 3}
+    card = %{id: "king-red-4", kind: :number, suit: :red, rank: 4}
+    room = put_player_hands(room, %{resistance_id => [resistance_card], player_id => [card]})
+
+    {:ok, _room} = RoomRegistry.play_card(room.code, resistance_id, resistance_card.id)
 
     assert {:error, "Only the Resistance can declare Kakumei"} =
-             RoomRegistry.declare_kakumei(room.code, player_id)
+             RoomRegistry.play_card(room.code, player_id, card.id, true)
   end
 
   test "continuing a completed round preserves scores and starts next character selection" do

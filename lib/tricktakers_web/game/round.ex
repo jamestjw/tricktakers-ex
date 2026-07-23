@@ -135,17 +135,18 @@ defmodule TricktakersWeb.Game.Round do
     setup = get_in(game, [:character_setup_done, player_id]) || %{}
     bid = parse_int(setup["bid"])
     wager = parse_int(setup["wager"])
-    bid_points = %{0 => 30, 1 => 60, 2 => 90, 3 => 150} |> Map.get(bid, 0)
+    bid_points = %{0 => 30, 1 => 60, 2 => 90, 3 => 150, 4 => 150, 5 => 200} |> Map.get(bid, 0)
 
     if trick_wins(game, player_id) == bid do
-      bid_points + wager
+      bid_points + wager * 2
     else
       bid_points - wager
     end
   end
 
   defp score_player(game, player_id, "resistance") do
-    trick_wins(game, player_id) * 30 + resistance_revolt_bonus(game, player_id)
+    final_round_trick_points = if game.round == 3, do: trick_wins(game, player_id) * 30, else: 0
+    final_round_trick_points + resistance_revolt_bonus(game, player_id)
   end
 
   defp score_player(game, player_id, "hermit") do

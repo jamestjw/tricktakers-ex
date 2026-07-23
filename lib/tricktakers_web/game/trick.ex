@@ -55,14 +55,18 @@ defmodule TricktakersWeb.Game.Trick do
       |> Enum.min_by(fn {play, index} -> {revolt_card_strength(play.card), index} end)
       |> elem(0)
     else
-      plays
-      |> Enum.with_index()
-      |> Enum.max_by(fn {play, index} -> {card_strength(play.card, suit), -index} end)
-      |> elem(0)
+      winner =
+        plays
+        |> Enum.with_index()
+        |> Enum.max_by(fn {play, index} -> {card_strength(play.card, suit), -index} end)
+        |> elem(0)
+
+      special_winner(winner, plays, opts)
     end
   end
 
   defp card_strength(%{kind: :rare}, _lead_suit), do: 300
+  defp card_strength(%{kind: :berserker}, _lead_suit), do: 400
   defp card_strength(%{kind: :white_flag}, _lead_suit), do: 0
   defp card_strength(%{kind: :number, suit: :black, rank: rank}, _lead_suit), do: 200 + rank
   defp card_strength(%{kind: :number, suit: suit, rank: rank}, suit), do: 100 + rank
@@ -72,8 +76,45 @@ defmodule TricktakersWeb.Game.Trick do
   defp revolt_card_strength(%{kind: :number, suit: :black, rank: rank}), do: 100 + rank
   defp revolt_card_strength(%{kind: :number, rank: rank}), do: rank
   defp revolt_card_strength(%{kind: :rare}), do: 200
+  defp revolt_card_strength(%{kind: :berserker}), do: 300
 
-  defp colorless?(%{kind: kind}), do: kind in [:rare, :white_flag]
+  defp special_winner(%{card: %{kind: :rare}} = winner, plays, opts) do
+    case Enum.find(plays, fn play ->
+           play.player_id == Keyword.get(opts, :hermit_player_id) and
+             play.card.kind == :white_flag
+         end) do
+      nil -> berserker_one_override(winner, plays, opts)
+      play -> play
+    end
+  end
+
+  defp special_winner(winner, plays, opts), do: berserker_one_override(winner, plays, opts)
+
+  defp berserker_one_override(%{player_id: player_id, card: %{kind: :berserker}}, plays, opts) do
+    Enum.find(plays, fn play ->
+      play.player_id == Keyword.get(opts, :berserker_player_id) and play.card.kind == :number and
+        play.card.rank == 1
+    end) || Enum.find(plays, &(&1.player_id == player_id and &1.card.kind == :berserker))
+  end
+
+  defp berserker_one_override(
+         %{player_id: player_id, card: %{kind: :number, suit: suit, rank: 10}} = winner,
+         plays,
+         opts
+       ) do
+    if player_id == Keyword.get(opts, :berserker_player_id) do
+      Enum.find(plays, fn play ->
+        play.player_id == player_id and play.card.kind == :number and play.card.suit == suit and
+          play.card.rank == 1
+      end) || winner
+    else
+      winner
+    end
+  end
+
+  defp berserker_one_override(winner, _plays, _opts), do: winner
+
+  defp colorless?(%{kind: kind}), do: kind in [:rare, :white_flag, :berserker]
   defp number_suit?(%{kind: :number, suit: card_suit}, suit), do: card_suit == suit
   defp number_suit?(_card, _suit), do: false
 end

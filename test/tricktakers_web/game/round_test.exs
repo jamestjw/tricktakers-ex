@@ -62,7 +62,7 @@ defmodule TricktakersWeb.Game.RoundTest do
     assert Round.resolve(game(%{king: 4, gambler: 1}, %{}, 3)).points_delta["king"] == 240
   end
 
-  test "scores gambler bid payout plus or minus wager" do
+  test "scores gambler bid payout with double wager when made" do
     made =
       Round.resolve(
         game(%{gambler: 3, king: 2}, %{"gambler" => %{"bid" => "3", "wager" => "40"}})
@@ -73,15 +73,18 @@ defmodule TricktakersWeb.Game.RoundTest do
         game(%{gambler: 2, king: 3}, %{"gambler" => %{"bid" => "3", "wager" => "40"}})
       )
 
-    assert made.points_delta["gambler"] == 190
+    assert made.points_delta["gambler"] == 230
     assert missed.points_delta["gambler"] == 110
   end
 
-  test "scores berserker and resistance points" do
+  test "scores berserker and only final-round resistance trick points" do
     result = Round.resolve(game(%{berserker: 2, resistance: 3, king: 0}))
 
     assert result.points_delta["berserker"] == 30
-    assert result.points_delta["resistance"] == 90
+    assert result.points_delta["resistance"] == 0
+
+    final_round = Round.resolve(game(%{berserker: 2, resistance: 3, king: 0}, %{}, 3))
+    assert final_round.points_delta["resistance"] == 90
   end
 
   test "resistance scores revolt bonus when winning the revolt trick" do
@@ -101,7 +104,7 @@ defmodule TricktakersWeb.Game.RoundTest do
 
     result = Round.resolve(game)
 
-    assert result.points_delta["resistance"] == 60
+    assert result.points_delta["resistance"] == 30
   end
 
   test "resistance wins immediately by winning revolt with black" do

@@ -13,6 +13,13 @@ defmodule TricktakersWeb.Game.Deck do
     number_cards() ++ rare_cards() ++ white_flag_cards()
   end
 
+  @spec berserker_deck() :: [Card.t()]
+  def berserker_deck do
+    [%{id: "berserker", kind: :berserker}] ++
+      for(suit <- @suits, do: %{id: "berserker-#{suit}-10", kind: :number, suit: suit, rank: 10}) ++
+      [%{id: "berserker-rare", kind: :rare}, %{id: "berserker-white-flag", kind: :white_flag}]
+  end
+
   @spec shuffle([Card.t()]) :: [Card.t()]
   def shuffle(cards), do: Enum.shuffle(cards)
 

@@ -22,6 +22,7 @@ defmodule TricktakersWebWeb.GameLive do
       |> assign(:setup_state, SetupState.new())
       |> assign(:selection_error, nil)
       |> assign(:setup_error, nil)
+      |> assign(:revolt_ready?, false)
 
     socket = if connected?, do: maybe_auto_complete_setup(socket), else: socket
 
@@ -136,10 +137,11 @@ defmodule TricktakersWebWeb.GameLive do
     case RoomRegistry.play_card(
            socket.assigns.room.code,
            socket.assigns.player_session_id,
-           card_id
+           card_id,
+           socket.assigns.revolt_ready?
          ) do
       {:ok, room} ->
-        {:noreply, assign(socket, room: room, setup_error: nil)}
+        {:noreply, assign(socket, room: room, setup_error: nil, revolt_ready?: false)}
 
       {:error, reason} ->
         {:noreply, assign(socket, :setup_error, reason)}
@@ -147,12 +149,10 @@ defmodule TricktakersWebWeb.GameLive do
   end
 
   def handle_event("declare_kakumei", _params, socket) do
-    case RoomRegistry.declare_kakumei(socket.assigns.room.code, socket.assigns.player_session_id) do
-      {:ok, room} ->
-        {:noreply, assign(socket, room: room, setup_error: nil)}
-
-      {:error, reason} ->
-        {:noreply, assign(socket, :setup_error, reason)}
+    if can_declare_kakumei?(socket.assigns.room.game, socket.assigns.player_session_id) do
+      {:noreply, assign(socket, revolt_ready?: true, setup_error: nil)}
+    else
+      {:noreply, assign(socket, :setup_error, "Kakumei must be declared while playing your card")}
     end
   end
 
@@ -248,6 +248,7 @@ defmodule TricktakersWebWeb.GameLive do
                     room={@room}
                     player_session_id={@player_session_id}
                     play_error={@setup_error}
+                    revolt_ready?={@revolt_ready?}
                   />
               <% end %>
             <% end %>
@@ -909,6 +910,7 @@ defmodule TricktakersWebWeb.GameLive do
   attr :room, :map, required: true
   attr :player_session_id, :string, required: true
   attr :play_error, :string, default: nil
+  attr :revolt_ready?, :boolean, default: false
 
   defp active_table(assigns) do
     assigns =
@@ -980,10 +982,10 @@ defmodule TricktakersWebWeb.GameLive do
                 type="button"
                 class="btn gold sm"
                 phx-click="declare_kakumei"
-                disabled={!@table.can_declare_kakumei?}
+                disabled={!@table.can_declare_kakumei? or @revolt_ready?}
               >
-                <%= if @table.revolt_active? do %>
-                  Revolt active
+                <%= if @revolt_ready? do %>
+                  Kakumei ready
                 <% else %>
                   Declare Kakumei
                 <% end %>
@@ -1192,7 +1194,7 @@ defmodule TricktakersWebWeb.GameLive do
     Map.get(game.character_picks || %{}, player_session_id) == "resistance" and
       player_session_id not in used_player_ids and
       get_in(game, [:revolt, :active_trick]) != game.trick and
-      (game.current_player == player_session_id or already_played?)
+      game.current_player == player_session_id and not already_played?
   end
 
   defp round_summary_state(room, player_session_id) do
