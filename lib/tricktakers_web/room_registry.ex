@@ -216,6 +216,7 @@ defmodule TricktakersWeb.RoomRegistry do
          :ok <- ensure_setup_phase(game),
          :ok <- ensure_current_picker(game, valid_session_id),
          {:ok, valid_character_id} <- validate_character_id(found_room.mode, character_id),
+         :ok <- ensure_king_not_reselected(game, valid_session_id, valid_character_id),
          :ok <- ensure_character_available(game, valid_character_id) do
       picks = Map.put(game.character_picks, valid_session_id, valid_character_id)
       all_picked? = map_size(picks) == length(game.character_order)
@@ -619,6 +620,14 @@ defmodule TricktakersWeb.RoomRegistry do
       else: :ok
   end
 
+  defp ensure_king_not_reselected(game, player_session_id, "king") when game.round > 1 do
+    if Map.get(game, :prior_character_picks, %{})[player_session_id] == "king",
+      do: {:error, "The previous round's King player cannot choose King again"},
+      else: :ok
+  end
+
+  defp ensure_king_not_reselected(_game, _player_session_id, _character_id), do: :ok
+
   defp validate_character_id(mode, character_id) do
     normalized = String.trim(character_id || "")
 
@@ -862,6 +871,8 @@ defmodule TricktakersWeb.RoomRegistry do
     lead_player_token_id = game.next_lead_player_id || game.lead_player_token_id || hd(player_ids)
     {hands, draw_pile} = Deck.deal_with_draw_pile(player_ids)
 
+    character_order = character_selection_order(game, player_ids)
+
     game =
       game
       |> Map.put(:phase, :character_selection)
@@ -873,7 +884,7 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:completed_tricks, [])
       |> Map.put(:trick_wins, %{})
       |> Map.put(:lead_player_token_id, lead_player_token_id)
-      |> Map.put(:character_order, rotate_player_order(player_ids, lead_player_token_id))
+      |> Map.put(:character_order, character_order)
       |> Map.put(:hands, hands)
       |> Map.put(:draw_pile, draw_pile)
       |> Map.put(:discards, [])
@@ -881,6 +892,7 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:gambler_redraws, %{})
       |> Map.put(:hermit_pending_draws, %{})
       |> Map.put(:character_picks, %{})
+      |> Map.put(:prior_character_picks, game.character_picks)
       |> Map.put(:current_picker_index, 0)
       |> Map.put(:character_setup_order, [])
       |> Map.put(:character_setup_done, %{})
@@ -992,10 +1004,30 @@ defmodule TricktakersWeb.RoomRegistry do
   defp max_rounds(%{max_players: 2}), do: 5
   defp max_rounds(_room), do: 3
 
-  defp rotate_player_order(player_ids, player_id) do
-    index = Enum.find_index(player_ids, &(&1 == player_id)) || 0
-    {before, after_and_player} = Enum.split(player_ids, index)
-    after_and_player ++ before
+  defp character_selection_order(game, player_ids) when length(player_ids) == 2 do
+    if rem(game.round + 1, 2) == 1,
+      do: player_ids,
+      else: Enum.reverse(player_ids)
+  end
+
+  defp character_selection_order(game, player_ids) do
+    prior_picks = game.character_picks
+
+    king_player_id =
+      Enum.find(player_ids, fn player_id -> Map.get(prior_picks, player_id) == "king" end)
+
+    remaining_player_ids = Enum.reject(player_ids, &(&1 == king_player_id))
+
+    ordered_remaining =
+      Enum.sort_by(remaining_player_ids, fn player_id ->
+        prior_character_id = Map.get(prior_picks, player_id)
+        gold_count = get_in(game, [:crowns, player_id, :gold]) || 0
+
+        {if(gold_count > 0, do: 1, else: 0), Map.get(game.points, player_id, 0),
+         character_priority_rank(prior_character_id)}
+      end)
+
+    if king_player_id, do: [king_player_id | ordered_remaining], else: ordered_remaining
   end
 
   defp mark_kakumei(game, player_session_id) do
