@@ -107,6 +107,36 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.character_setup_done[player_id] == %{"bid" => "5", "wager" => "100"}
   end
 
+  test "round 3 black crowns redraw separately and delay first lead until every holder is done" do
+    {room, host_id, gambler_id, resistance_id} =
+      start_round_three_black_crown_setup("Black Crown Redraw")
+
+    original_hand = room.game.hands[host_id]
+    replacement = hd(room.game.draw_pile)
+
+    {:ok, room} = RoomRegistry.redraw_black_crown_hand(room.code, host_id, [hd(original_hand).id])
+
+    assert room.game.phase == :black_crown_redraw
+    assert room.game.crowns[host_id].black == 1
+    refute Map.has_key?(room.game.black_crown_redraw_done, host_id)
+    assert replacement in room.game.hands[host_id]
+
+    {:ok, room} = RoomRegistry.skip_black_crown_redraw(room.code, gambler_id)
+
+    assert room.game.phase == :black_crown_redraw
+    assert room.game.crowns[gambler_id].black == 1
+    assert room.game.black_crown_redraw_done[gambler_id]
+
+    {:ok, room} = RoomRegistry.redraw_black_crown_hand(room.code, host_id, [])
+
+    assert room.game.crowns[host_id].black == 0
+    assert room.game.phase == :choosing_first_lead
+    assert room.game.black_crown_redraw_done[host_id]
+
+    assert {:error, "Black crown redraw is not active"} =
+             RoomRegistry.redraw_black_crown_hand(room.code, resistance_id, [])
+  end
+
   test "current player can play a legal card to the current trick" do
     {room, host_id, player_id} = start_playing_game("Legal Play")
     red_3 = %{id: "test-red-3", kind: :number, suit: :red, rank: 3}
@@ -361,6 +391,55 @@ defmodule TricktakersWeb.RoomRegistryTest do
     assert room.game.points[player_id] == 50
 
     {room, host_id, player_id}
+  end
+
+  defp start_round_three_black_crown_setup(room_name) do
+    host_id = "crown-host-#{System.unique_integer([:positive])}"
+    gambler_id = "crown-gambler-#{System.unique_integer([:positive])}"
+    resistance_id = "crown-resistance-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "King",
+          "room_name" => room_name,
+          "max_players" => "3",
+          "mode" => "Basic"
+        },
+        host_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, gambler_id, "Gambler")
+    {:ok, room} = RoomRegistry.join_room(room.code, resistance_id, "Resistance")
+    {:ok, room} = RoomRegistry.start_game(room.code, host_id)
+    room = put_room_round(room, 3)
+    {:ok, room} = RoomRegistry.choose_character(room.code, host_id, "king")
+    {:ok, room} = RoomRegistry.choose_character(room.code, gambler_id, "gambler")
+    {:ok, room} = RoomRegistry.choose_character(room.code, resistance_id, "resistance")
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :crowns, host_id, :black], 2)
+      |> put_in([:rooms, room.code, :game, :crowns, gambler_id, :black], 1)
+    end)
+
+    room = RoomRegistry.get_room(room.code)
+    king_discard = hd(room.game.hands[host_id])
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, host_id, %{"discard" => king_discard.id})
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, gambler_id, %{
+        "bid" => "2",
+        "wager" => "100"
+      })
+
+    {:ok, room} =
+      RoomRegistry.complete_character_setup(room.code, resistance_id, %{"notes" => "auto"})
+
+    assert room.game.phase == :black_crown_redraw
+    {room, host_id, gambler_id, resistance_id}
   end
 
   defp start_playing_game(room_name) do

@@ -233,4 +233,42 @@ defmodule TricktakersWebWeb.GameLiveTest do
     assert resistance_html =~ "declare-kakumei"
     refute king_html =~ "declare-kakumei"
   end
+
+  test "renders black crown redraw controls for an eligible round 3 player", %{conn: conn} do
+    host_id = "ui-crown-host-#{System.unique_integer([:positive])}"
+    player_id = "ui-crown-player-#{System.unique_integer([:positive])}"
+    third_id = "ui-crown-third-#{System.unique_integer([:positive])}"
+
+    {:ok, room} =
+      RoomRegistry.create_room(
+        %{
+          "player_name" => "King",
+          "room_name" => "Black Crown UI",
+          "max_players" => "3",
+          "mode" => "Basic"
+        },
+        host_id
+      )
+
+    {:ok, room} = RoomRegistry.join_room(room.code, player_id, "Gambler")
+    {:ok, room} = RoomRegistry.join_room(room.code, third_id, "Resistance")
+    {:ok, room} = RoomRegistry.start_game(room.code, host_id)
+
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :phase], :black_crown_redraw)
+      |> put_in([:rooms, room.code, :game, :round], 3)
+      |> put_in([:rooms, room.code, :game, :black_crown_redraw_eligible], [host_id])
+      |> put_in([:rooms, room.code, :game, :black_crown_redraw_done], %{})
+      |> put_in([:rooms, room.code, :game, :crowns, host_id, :black], 1)
+    end)
+
+    conn = Plug.Test.init_test_session(conn, %{"player_session_id" => host_id})
+    {:ok, view, _html} = live(conn, ~p"/games/#{room.code}")
+
+    assert has_element?(view, "#black-crown-redraw")
+    assert has_element?(view, "#black-crown-redraw-hand")
+    assert has_element?(view, "#redraw-black-crown-hand")
+    assert has_element?(view, "#skip-black-crown-redraw")
+  end
 end

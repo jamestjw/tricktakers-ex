@@ -23,6 +23,7 @@ defmodule TricktakersWebWeb.GameLive do
       |> assign(:selection_error, nil)
       |> assign(:setup_error, nil)
       |> assign(:revolt_ready?, false)
+      |> assign(:black_crown_selected_card_ids, [])
 
     socket = if connected?, do: maybe_auto_complete_setup(socket), else: socket
 
@@ -41,6 +42,14 @@ defmodule TricktakersWebWeb.GameLive do
      |> assign(
        :setup_state,
        setup_state_for(room, socket.assigns.player_session_id, socket.assigns.setup_state)
+     )
+     |> assign(
+       :black_crown_selected_card_ids,
+       selected_black_crown_card_ids(
+         room,
+         socket.assigns.player_session_id,
+         socket.assigns.black_crown_selected_card_ids
+       )
      )
      |> maybe_auto_complete_setup()}
   end
@@ -101,6 +110,46 @@ defmodule TricktakersWebWeb.GameLive do
           |> SetupState.clear_selections()
 
         {:noreply, assign(socket, room: room, setup_state: setup_state, setup_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
+  def handle_event("toggle_black_crown_card", %{"card" => card_id}, socket) do
+    selected_card_ids = socket.assigns.black_crown_selected_card_ids
+
+    selected_card_ids =
+      if card_id in selected_card_ids,
+        do: List.delete(selected_card_ids, card_id),
+        else: selected_card_ids ++ [card_id]
+
+    {:noreply, assign(socket, black_crown_selected_card_ids: selected_card_ids, setup_error: nil)}
+  end
+
+  def handle_event("redraw_black_crown_hand", _params, socket) do
+    case RoomRegistry.redraw_black_crown_hand(
+           socket.assigns.room.code,
+           socket.assigns.player_session_id,
+           socket.assigns.black_crown_selected_card_ids
+         ) do
+      {:ok, room} ->
+        {:noreply,
+         assign(socket, room: room, black_crown_selected_card_ids: [], setup_error: nil)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, :setup_error, reason)}
+    end
+  end
+
+  def handle_event("skip_black_crown_redraw", _params, socket) do
+    case RoomRegistry.skip_black_crown_redraw(
+           socket.assigns.room.code,
+           socket.assigns.player_session_id
+         ) do
+      {:ok, room} ->
+        {:noreply,
+         assign(socket, room: room, black_crown_selected_card_ids: [], setup_error: nil)}
 
       {:error, reason} ->
         {:noreply, assign(socket, :setup_error, reason)}
@@ -247,6 +296,13 @@ defmodule TricktakersWebWeb.GameLive do
                     room={@room}
                     player_session_id={@player_session_id}
                     setup_state={@setup_state}
+                    setup_error={@setup_error}
+                  />
+                <% :black_crown_redraw -> %>
+                  <.black_crown_redraw_phase
+                    room={@room}
+                    player_session_id={@player_session_id}
+                    selected_card_ids={@black_crown_selected_card_ids}
                     setup_error={@setup_error}
                   />
                 <% :round_complete -> %>
@@ -547,6 +603,90 @@ defmodule TricktakersWebWeb.GameLive do
     """
   end
 
+  attr :room, :map, required: true
+  attr :player_session_id, :string, required: true
+  attr :selected_card_ids, :list, required: true
+  attr :setup_error, :string, default: nil
+
+  defp black_crown_redraw_phase(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :state,
+        black_crown_redraw_state(
+          assigns.room,
+          assigns.player_session_id,
+          assigns.selected_card_ids
+        )
+      )
+
+    ~H"""
+    <section id="black-crown-redraw" class="game-setup page-wide">
+      <header class="game-setup-header">
+        <div>
+          <div class="eyebrow">Round 3 of 3 · Black crown redraw</div>
+          <h1 class="tt-heading-1 game-setup-title">Spend black crowns or skip.</h1>
+          <p class="body game-setup-copy">
+            Each black crown buys one separate redraw: discard any number of cards and draw the same number from the standard draw pile.
+          </p>
+        </div>
+        <div class="status-row game-setup-status">
+          <span class="pill solid">{@state.waiting_label}</span>
+          <div class="sep"></div>
+          <span class="mono muted">{@room.code}</span>
+        </div>
+      </header>
+
+      <div class="game-setup-layout">
+        <section class="panel game-character-setup-card">
+          <%= if @state.your_turn? do %>
+            <div class="eyebrow">Your redraw</div>
+            <div class="game-character-setup-head">
+              <div class="tt-heading-2">{@state.crowns_left} black crowns available</div>
+              <span class="pill solid">{@state.selected_count} selected</span>
+            </div>
+            <.setup_hand_selector
+              id="black-crown-redraw-hand"
+              hand={@state.hand}
+              label="Choose cards to replace, or redraw without discarding"
+              selected_card_ids={@selected_card_ids}
+              event="toggle_black_crown_card"
+              selectable={true}
+            />
+            <div class="row gap-2" style="margin-top: 16px;">
+              <button
+                id="redraw-black-crown-hand"
+                type="button"
+                class="btn"
+                phx-click="redraw_black_crown_hand"
+              >
+                Spend black crown ({@state.crowns_left} left)
+              </button>
+              <button
+                id="skip-black-crown-redraw"
+                type="button"
+                class="btn ghost"
+                phx-click="skip_black_crown_redraw"
+              >
+                Skip redraw
+              </button>
+            </div>
+          <% else %>
+            <div class="panel-soft game-waiting-card">
+              <div class="tt-heading-3">Waiting for crown redraws</div>
+              <p class="body-sm">{@state.waiting_label}</p>
+            </div>
+          <% end %>
+
+          <%= if @setup_error do %>
+            <p class="body-sm game-selection-error">{@setup_error}</p>
+          <% end %>
+        </section>
+      </div>
+    </section>
+    """
+  end
+
   attr :character, :map, required: true
   attr :setup_state, :map, required: true
 
@@ -647,6 +787,7 @@ defmodule TricktakersWebWeb.GameLive do
       <div id={@id} class="game-setup-hand" role={if @selectable, do: "radiogroup", else: nil}>
         <%= for card <- @hand do %>
           <button
+            id={"#{@id}-#{card.id}"}
             type="button"
             class={[
               "game-setup-card-button",
@@ -681,7 +822,9 @@ defmodule TricktakersWebWeb.GameLive do
     selected_card_id == card_id or card_id in selected_card_ids
   end
 
-  defp setup_card_role("toggle_gambler_card"), do: "checkbox"
+  defp setup_card_role(event) when event in ["toggle_gambler_card", "toggle_black_crown_card"],
+    do: "checkbox"
+
   defp setup_card_role(_event), do: "radio"
 
   defp setup_hand_hint("toggle_gambler_card", _selected_card_id, []),
@@ -689,6 +832,12 @@ defmodule TricktakersWebWeb.GameLive do
 
   defp setup_hand_hint("toggle_gambler_card", _selected_card_id, selected_card_ids),
     do: "#{length(selected_card_ids)} selected; redraw will replace that many cards."
+
+  defp setup_hand_hint("toggle_black_crown_card", _selected_card_id, []),
+    do: "Select cards to replace, or spend a crown without discarding."
+
+  defp setup_hand_hint("toggle_black_crown_card", _selected_card_id, selected_card_ids),
+    do: "#{length(selected_card_ids)} selected; this redraw will replace that many cards."
 
   defp setup_hand_hint(_event, selected_card_id, _selected_card_ids) do
     if selected_card_id,
@@ -1537,6 +1686,38 @@ defmodule TricktakersWebWeb.GameLive do
       redraw_count,
       setup_state
     )
+  end
+
+  defp selected_black_crown_card_ids(room, player_session_id, selected_card_ids) do
+    hand_ids = room |> hand_for(player_session_id) |> Enum.map(& &1.id) |> MapSet.new()
+    Enum.filter(selected_card_ids, &MapSet.member?(hand_ids, &1))
+  end
+
+  defp black_crown_redraw_state(room, player_session_id, selected_card_ids) do
+    game = room.game
+    eligible = Map.get(game, :black_crown_redraw_eligible, [])
+    done = Map.get(game, :black_crown_redraw_done, %{})
+    waiting_player_ids = Enum.reject(eligible, &Map.has_key?(done, &1))
+    crowns_left = get_in(game, [:crowns, player_session_id, :black]) || 0
+
+    %{
+      your_turn?: player_session_id in waiting_player_ids,
+      crowns_left: crowns_left,
+      selected_count: length(selected_card_ids),
+      hand: hand_for(room, player_session_id, :sm),
+      waiting_label: waiting_player_names(room, waiting_player_ids)
+    }
+  end
+
+  defp waiting_player_names(_room, []), do: "All eligible players are done."
+
+  defp waiting_player_names(room, player_ids) do
+    names = Enum.map(player_ids, &player_name(room, &1))
+
+    case names do
+      [name] -> "Waiting for #{name}."
+      _ -> "Waiting for #{Enum.join(names, ", ")}."
+    end
   end
 
   defp maybe_auto_complete_setup(socket) do

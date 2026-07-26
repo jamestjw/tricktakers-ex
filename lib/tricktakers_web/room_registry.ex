@@ -43,6 +43,14 @@ defmodule TricktakersWeb.RoomRegistry do
     GenServer.call(__MODULE__, {:redraw_gambler_hand, code, player_session_id, card_ids})
   end
 
+  def redraw_black_crown_hand(code, player_session_id, card_ids) do
+    GenServer.call(__MODULE__, {:redraw_black_crown_hand, code, player_session_id, card_ids})
+  end
+
+  def skip_black_crown_redraw(code, player_session_id) do
+    GenServer.call(__MODULE__, {:skip_black_crown_redraw, code, player_session_id})
+  end
+
   def play_card(code, player_session_id, card_id, declare_revolt? \\ false) do
     GenServer.call(__MODULE__, {:play_card, code, player_session_id, card_id, declare_revolt?})
   end
@@ -184,6 +192,8 @@ defmodule TricktakersWeb.RoomRegistry do
         discards: [],
         revolt: %{used_player_ids: [], active_trick: nil, declared_by: nil},
         gambler_redraws: %{},
+        black_crown_redraw_eligible: [],
+        black_crown_redraw_done: %{},
         hermit_pending_draws: %{},
         character_picks: %{},
         used_characters: Map.new(player_ids, &{&1, []}),
@@ -288,7 +298,10 @@ defmodule TricktakersWeb.RoomRegistry do
         game
         |> Map.put(:character_setup_done, setup_done)
         |> Map.put(:current_setup_index, next_setup_index(game, setup_done))
-        |> start_playing_if_ready(all_setup?)
+        |> start_playing_if_ready(
+          all_setup?,
+          black_crown_redraw_required?(found_room, game, all_setup?)
+        )
 
       updated_room =
         found_room
@@ -325,6 +338,46 @@ defmodule TricktakersWeb.RoomRegistry do
       broadcast_rooms(new_state)
       broadcast_room(updated_room)
       {:reply, {:ok, updated_room}, new_state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:redraw_black_crown_hand, code, player_session_id, card_ids}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_black_crown_redraw_phase(game),
+         :ok <- ensure_black_crown_redraw_eligible(game, valid_session_id),
+         {:ok, discard_ids} <-
+           validate_black_crown_redraw_card_ids(game, valid_session_id, card_ids),
+         :ok <- ensure_black_crown_available(game, valid_session_id),
+         {:ok, game} <- redraw_hand(game, valid_session_id, discard_ids),
+         game <- spend_black_crown(game, valid_session_id),
+         game <- complete_black_crown_redraw_if_spent(game, valid_session_id),
+         game <- advance_black_crown_redraw_if_ready(game) do
+      update_room_game(found_room, game, state)
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:skip_black_crown_redraw, code, player_session_id}, _from, state) do
+    room = Map.get(state.rooms, String.upcase(code || ""))
+
+    with {:ok, found_room} <- fetch_room(room),
+         {:ok, valid_session_id} <- validate_session_id(player_session_id),
+         {:ok, game} <- fetch_game(found_room),
+         :ok <- ensure_black_crown_redraw_phase(game),
+         :ok <- ensure_black_crown_redraw_eligible(game, valid_session_id) do
+      game =
+        game
+        |> mark_black_crown_redraw_done(valid_session_id)
+        |> advance_black_crown_redraw_if_ready()
+
+      update_room_game(found_room, game, state)
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -533,6 +586,11 @@ defmodule TricktakersWeb.RoomRegistry do
   defp ensure_character_setup_phase(_game),
     do: {:error, "Character setup is not active"}
 
+  defp ensure_black_crown_redraw_phase(%{phase: :black_crown_redraw}), do: :ok
+
+  defp ensure_black_crown_redraw_phase(_game),
+    do: {:error, "Black crown redraw is not active"}
+
   defp ensure_playing_phase(%{phase: :playing}), do: :ok
   defp ensure_playing_phase(_game), do: {:error, "Trick play is not active"}
 
@@ -681,6 +739,19 @@ defmodule TricktakersWeb.RoomRegistry do
       else: {:error, "This setup action is not available for your character"}
   end
 
+  defp ensure_black_crown_redraw_eligible(game, player_session_id) do
+    cond do
+      player_session_id not in Map.get(game, :black_crown_redraw_eligible, []) ->
+        {:error, "You do not have a black crown redraw"}
+
+      Map.has_key?(Map.get(game, :black_crown_redraw_done, %{}), player_session_id) ->
+        {:error, "Your black crown redraw is complete"}
+
+      true ->
+        :ok
+    end
+  end
+
   defp apply_character_setup(game, player_session_id, setup_attrs) do
     case Map.get(game.character_picks || %{}, player_session_id) do
       "king" -> apply_king_setup(game, player_session_id, setup_attrs)
@@ -795,6 +866,31 @@ defmodule TricktakersWeb.RoomRegistry do
   defp validate_redraw_card_ids(_game, _player_session_id, _card_ids),
     do: {:error, "Choose cards from your current hand"}
 
+  defp validate_black_crown_redraw_card_ids(game, player_session_id, card_ids)
+       when is_list(card_ids) do
+    hand_ids =
+      game
+      |> get_in([:hands, player_session_id])
+      |> Kernel.||([])
+      |> Enum.map(& &1.id)
+      |> MapSet.new()
+
+    discard_ids = Enum.uniq(card_ids)
+
+    if Enum.all?(discard_ids, &MapSet.member?(hand_ids, &1)),
+      do: {:ok, discard_ids},
+      else: {:error, "Choose cards from your current hand"}
+  end
+
+  defp validate_black_crown_redraw_card_ids(_game, _player_session_id, _card_ids),
+    do: {:error, "Choose cards from your current hand"}
+
+  defp ensure_black_crown_available(game, player_session_id) do
+    if get_in(game, [:crowns, player_session_id, :black]) |> Kernel.||(0) > 0,
+      do: :ok,
+      else: {:error, "No black crowns remain to spend"}
+  end
+
   defp redraw_hand(game, player_session_id, discard_ids) do
     draw_pile = Map.get(game, :draw_pile, [])
     draw_count = length(discard_ids)
@@ -877,9 +973,19 @@ defmodule TricktakersWeb.RoomRegistry do
     end)
   end
 
-  defp start_playing_if_ready(game, false), do: Map.put(game, :phase, :character_setup)
+  defp start_playing_if_ready(game, false, _black_crown_redraw?),
+    do: Map.put(game, :phase, :character_setup)
 
-  defp start_playing_if_ready(game, true) do
+  defp start_playing_if_ready(game, true, true) do
+    eligible = black_crown_redraw_eligible_players(game)
+
+    game
+    |> Map.put(:phase, :black_crown_redraw)
+    |> Map.put(:black_crown_redraw_eligible, eligible)
+    |> Map.put(:black_crown_redraw_done, %{})
+  end
+
+  defp start_playing_if_ready(game, true, false) do
     if game.round > 1 and is_binary(Map.get(game, :lead_player_token_id)) do
       Map.put(game, :phase, :choosing_first_lead)
     else
@@ -889,6 +995,46 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:phase, :playing)
       |> Map.put(:current_player, lead)
       |> Map.put(:current_trick, [])
+    end
+  end
+
+  defp black_crown_redraw_required?(room, game, all_setup?) do
+    all_setup? and room.mode == "Basic" and length(room.players) in 3..5 and game.round == 3 and
+      black_crown_redraw_eligible_players(game) != []
+  end
+
+  defp black_crown_redraw_eligible_players(game) do
+    Enum.filter(game.character_order, fn player_id ->
+      (get_in(game, [:crowns, player_id, :black]) || 0) > 0
+    end)
+  end
+
+  defp spend_black_crown(game, player_session_id) do
+    update_in(game, [:crowns, player_session_id, :black], &(&1 - 1))
+  end
+
+  defp complete_black_crown_redraw_if_spent(game, player_session_id) do
+    if get_in(game, [:crowns, player_session_id, :black]) == 0,
+      do: mark_black_crown_redraw_done(game, player_session_id),
+      else: game
+  end
+
+  defp mark_black_crown_redraw_done(game, player_session_id) do
+    Map.put(
+      game,
+      :black_crown_redraw_done,
+      Map.put(Map.get(game, :black_crown_redraw_done, %{}), player_session_id, true)
+    )
+  end
+
+  defp advance_black_crown_redraw_if_ready(game) do
+    eligible = Map.get(game, :black_crown_redraw_eligible, [])
+    done = Map.get(game, :black_crown_redraw_done, %{})
+
+    if Enum.all?(eligible, &Map.has_key?(done, &1)) do
+      start_playing_if_ready(game, true, false)
+    else
+      game
     end
   end
 
@@ -928,6 +1074,8 @@ defmodule TricktakersWeb.RoomRegistry do
       |> Map.put(:discards, [])
       |> Map.put(:revolt, %{used_player_ids: [], active_trick: nil, declared_by: nil})
       |> Map.put(:gambler_redraws, %{})
+      |> Map.put(:black_crown_redraw_eligible, [])
+      |> Map.put(:black_crown_redraw_done, %{})
       |> Map.put(:hermit_pending_draws, %{})
       |> Map.put(:character_picks, final_picks)
       |> Map.put(:prior_character_picks, game.character_picks)
