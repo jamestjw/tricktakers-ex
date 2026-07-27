@@ -294,6 +294,83 @@ defmodule TricktakersWeb.RoomRegistryTest do
              RoomRegistry.play_card(room.code, player_id, card.id, true)
   end
 
+  test "two-player character selection alternates first picker and rotates each player's characters" do
+    {room, host_id, player_id} = start_king_gambler_setup("Two Player Character Rotation")
+
+    assert room.game.character_order == [host_id, player_id]
+    assert room.game.used_characters == %{host_id => ["king"], player_id => ["gambler"]}
+
+    room = put_round_complete(room, player_id)
+    {:ok, room} = RoomRegistry.continue_next_round(room.code, host_id)
+
+    assert room.game.round == 2
+    assert room.game.character_order == [player_id, host_id]
+
+    assert {:error, "Each basic character can only be used once per two-player game"} =
+             RoomRegistry.choose_character(room.code, player_id, "gambler")
+
+    {:ok, room} = RoomRegistry.choose_character(room.code, player_id, "hermit")
+    {:ok, room} = RoomRegistry.choose_character(room.code, host_id, "gambler")
+
+    room = put_round_complete(room, host_id)
+    {:ok, room} = RoomRegistry.continue_next_round(room.code, host_id)
+
+    assert room.game.round == 3
+    assert room.game.character_order == [host_id, player_id]
+
+    {:ok, room} = RoomRegistry.choose_character(room.code, host_id, "resistance")
+    {:ok, room} = RoomRegistry.choose_character(room.code, player_id, "berserker")
+
+    room = put_round_complete(room, player_id)
+    {:ok, room} = RoomRegistry.continue_next_round(room.code, host_id)
+
+    assert room.game.round == 4
+    assert room.game.character_order == [player_id, host_id]
+
+    {:ok, room} = RoomRegistry.choose_character(room.code, player_id, "king")
+    {:ok, room} = RoomRegistry.choose_character(room.code, host_id, "hermit")
+
+    assert room.game.used_characters == %{
+             host_id => ["hermit", "resistance", "gambler", "king"],
+             player_id => ["king", "berserker", "hermit", "gambler"]
+           }
+  end
+
+  test "round 4 rejects two-player selections that leave the same round 5 character" do
+    {room, host_id, player_id} = start_playing_game("Round 4 Character Collision")
+
+    room =
+      put_two_player_character_selection(room, 4, %{
+        host_id => ["king", "gambler", "resistance"],
+        player_id => ["king", "gambler", "hermit"]
+      })
+
+    {:ok, room} = RoomRegistry.choose_character(room.code, host_id, "hermit")
+
+    assert {:error, "Round 4 selections must leave different characters for Round 5"} =
+             RoomRegistry.choose_character(room.code, player_id, "resistance")
+
+    assert room.game.character_picks == %{host_id => "hermit"}
+  end
+
+  test "round 5 automatically assigns each two-player player's remaining basic character" do
+    {room, host_id, player_id} = start_playing_game("Round 5 Automatic Characters")
+
+    room =
+      put_two_player_character_selection(room, 4, %{
+        host_id => ["king", "gambler", "resistance", "hermit"],
+        player_id => ["king", "gambler", "hermit", "berserker"]
+      })
+      |> put_round_complete(player_id)
+
+    {:ok, room} = RoomRegistry.continue_next_round(room.code, host_id)
+
+    assert room.game.round == 5
+    assert room.game.phase == :character_setup
+    assert room.game.character_picks == %{host_id => "berserker", player_id => "resistance"}
+    assert room.game.character_setup_order == [player_id, host_id]
+  end
+
   test "continuing a completed round preserves scores and starts next character selection" do
     {room, host_id, player_id} = start_playing_game("Continue Round")
     room = put_round_complete(room, player_id)
@@ -538,6 +615,19 @@ defmodule TricktakersWeb.RoomRegistryTest do
   defp put_room_round(room, round) do
     :sys.replace_state(RoomRegistry, fn state ->
       put_in(state, [:rooms, room.code, :game, :round], round)
+    end)
+
+    RoomRegistry.get_room(room.code)
+  end
+
+  defp put_two_player_character_selection(room, round, used_characters) do
+    :sys.replace_state(RoomRegistry, fn state ->
+      state
+      |> put_in([:rooms, room.code, :game, :round], round)
+      |> put_in([:rooms, room.code, :game, :phase], :character_selection)
+      |> put_in([:rooms, room.code, :game, :character_picks], %{})
+      |> put_in([:rooms, room.code, :game, :current_picker_index], 0)
+      |> put_in([:rooms, room.code, :game, :used_characters], used_characters)
     end)
 
     RoomRegistry.get_room(room.code)

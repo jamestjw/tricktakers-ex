@@ -721,7 +721,9 @@ defmodule TricktakersWeb.RoomRegistry do
       remaining_characters =
         Enum.map(game.character_order, fn player_id ->
           character_ids_for_mode("Basic") --
-            (Map.get(game.used_characters, player_id, []) -- [Map.fetch!(picks, player_id)])
+            Enum.uniq([
+              Map.fetch!(picks, player_id) | Map.get(game.used_characters, player_id, [])
+            ])
         end)
 
       if remaining_characters |> List.flatten() |> Enum.uniq() |> length() == 2,
