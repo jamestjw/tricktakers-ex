@@ -230,6 +230,8 @@ defmodule TricktakersWeb.RoomRegistry do
          {:ok, valid_character_id} <- validate_character_id(found_room.mode, character_id),
          :ok <- ensure_king_not_reselected(game, valid_session_id, valid_character_id),
          :ok <- ensure_two_player_character_available(game, valid_session_id, valid_character_id),
+         :ok <-
+           ensure_two_player_final_character_choice(game, valid_session_id, valid_character_id),
          :ok <- ensure_character_available(game, valid_character_id) do
       picks = Map.put(game.character_picks, valid_session_id, valid_character_id)
 
@@ -707,6 +709,24 @@ defmodule TricktakersWeb.RoomRegistry do
     if two_player_game?(game) and
          character_id in Map.get(game.used_characters, player_session_id, []) do
       {:error, "Each basic character can only be used once per two-player game"}
+    else
+      :ok
+    end
+  end
+
+  defp ensure_two_player_final_character_choice(game, player_session_id, character_id) do
+    picks = Map.put(game.character_picks, player_session_id, character_id)
+
+    if two_player_game?(game) and game.round == 4 and map_size(picks) == 2 do
+      remaining_characters =
+        Enum.map(game.character_order, fn player_id ->
+          character_ids_for_mode("Basic") --
+            (Map.get(game.used_characters, player_id, []) -- [Map.fetch!(picks, player_id)])
+        end)
+
+      if remaining_characters |> List.flatten() |> Enum.uniq() |> length() == 2,
+        do: :ok,
+        else: {:error, "Round 4 selections must leave different characters for Round 5"}
     else
       :ok
     end
