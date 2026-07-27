@@ -87,8 +87,8 @@ defmodule TricktakersWebWeb.GameLiveTest do
     assert html =~ "Round results."
     assert html =~ "King · 3 tricks"
     assert html =~ "+50 pts"
-    assert html =~ "Gold crown"
-    assert html =~ "Black crowns"
+    refute html =~ "Gold crown"
+    refute html =~ "Black crowns"
     assert html =~ "Gambler gets the lead player token."
     assert html =~ "Continue to round 2"
   end

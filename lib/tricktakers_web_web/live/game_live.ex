@@ -914,7 +914,9 @@ defmodule TricktakersWebWeb.GameLive do
           <div class="eyebrow">Round {@summary.round} complete</div>
           <h1 class="tt-heading-1 game-setup-title">Round results.</h1>
           <p class="body game-setup-copy">
-            Crowns, points, and the next lead player are resolved after all 5 tricks.
+            {if @room.max_players == 2,
+              do: "Points and the next lead player are resolved after all 5 tricks.",
+              else: "Crowns, points, and the next lead player are resolved after all 5 tricks."}
           </p>
         </div>
         <div class="status-row game-setup-status">
@@ -952,17 +954,19 @@ defmodule TricktakersWebWeb.GameLive do
         </section>
 
         <aside class="game-setup-sidebar">
-          <div class="panel">
-            <div class="eyebrow">Crowns</div>
-            <div class="game-picker-list">
-              <div class="game-picker-row">
-                <span>Gold crown</span><span class="pill gold">{@summary.gold_crown_label}</span>
-              </div>
-              <div class="game-picker-row">
-                <span>Black crowns</span><span class="pill">{@summary.black_crown_label}</span>
+          <%= if @room.max_players > 2 do %>
+            <div class="panel">
+              <div class="eyebrow">Crowns</div>
+              <div class="game-picker-list">
+                <div class="game-picker-row">
+                  <span>Gold crown</span><span class="pill gold">{@summary.gold_crown_label}</span>
+                </div>
+                <div class="game-picker-row">
+                  <span>Black crowns</span><span class="pill">{@summary.black_crown_label}</span>
+                </div>
               </div>
             </div>
-          </div>
+          <% end %>
 
           <div class="panel-soft">
             <div class="eyebrow">Next lead</div>
@@ -1005,10 +1009,18 @@ defmodule TricktakersWebWeb.GameLive do
     <section id="choosing-first-lead" class="game-setup page-wide">
       <header class="game-setup-header">
         <div>
-          <div class="eyebrow">Round {@lead_choice.round} · Lead token</div>
+          <div class="eyebrow">
+            Round {@lead_choice.round} · {if @room.max_players == 2 and @lead_choice.round == 5,
+              do: "Final lead",
+              else: "Lead token"}
+          </div>
           <h1 class="tt-heading-1 game-setup-title">Choose the first lead.</h1>
           <p class="body game-setup-copy">
-            Character setup is complete. The lead player token holder chooses who leads the first trick.
+            {if @room.max_players == 2 and @lead_choice.round == 5,
+              do:
+                "Character setup is complete. The lower-point player chooses who leads the final round's first trick.",
+              else:
+                "Character setup is complete. The lead player token holder chooses who leads the first trick."}
           </p>
         </div>
         <div class="status-row game-setup-status">
@@ -1092,14 +1104,16 @@ defmodule TricktakersWebWeb.GameLive do
         </div>
         <.progress_dots current={@table.trick} total={@table.total_tricks} />
         <div class="game-status-separator"></div>
-        <div class="row gap-2 game-crown-ledger" aria-label="Crown ledger">
-          <.crown />
-          <.crown empty />
-          <.crown empty />
-          <span class="muted body-sm">/</span>
-          <.crown black />
-          <.crown black empty />
-        </div>
+        <%= if @room.max_players > 2 do %>
+          <div class="row gap-2 game-crown-ledger" aria-label="Crown ledger">
+            <.crown />
+            <.crown empty />
+            <.crown empty />
+            <span class="muted body-sm">/</span>
+            <.crown black />
+            <.crown black empty />
+          </div>
+        <% end %>
         <div class="game-status-actions">
           <span class="pill red">Lead color · {@table.lead_color}</span>
           <span class="pill solid">{@table.active_player} leads</span>
